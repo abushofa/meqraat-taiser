@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../../core/network/api_client.dart';
 import '../../core/utils/app_labels.dart';
 import '../../core/widgets/app_dialogs.dart';
 import '../../core/ui/app_snackbar.dart';
+import '../../core/utils/admin_refresh_notifier.dart';
 
 class AdminManageStudentsScreen extends StatefulWidget {
   const AdminManageStudentsScreen({super.key});
@@ -19,11 +22,24 @@ class _AdminManageStudentsScreenState extends State<AdminManageStudentsScreen> {
   List<Map<String, dynamic>> students = [];
   List<Map<String, dynamic>> teachers = [];
   final Map<int, int?> _selectedTeacherByStudent = {};
+  StreamSubscription? _refreshSub;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+
+    _refreshSub = AdminRefreshNotifier.stream.listen((_) {
+      if (mounted) {
+        _loadData();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshSub?.cancel();
+    super.dispose();
   }
 
   List<Map<String, dynamic>> get _uniqueTeachers {
@@ -77,7 +93,8 @@ class _AdminManageStudentsScreenState extends State<AdminManageStudentsScreen> {
           final teacherId = int.tryParse('${m['teacher_id'] ?? ''}');
 
           if (studentId != null) {
-            final exists = teacherId != null &&
+            final exists =
+                teacherId != null &&
                 uniqueTeachers.any(
                   (t) => int.tryParse('${t['teacher_id'] ?? ''}') == teacherId,
                 );
@@ -172,10 +189,7 @@ class _AdminManageStudentsScreenState extends State<AdminManageStudentsScreen> {
       final dio = await ApiClient.getInstance();
       final response = await dio.post(
         '/admin/update_student_teacher.php',
-        data: {
-          'student_id': studentId,
-          'teacher_id': teacherId,
-        },
+        data: {'student_id': studentId, 'teacher_id': teacherId},
       );
 
       final body = response.data;
@@ -187,7 +201,7 @@ class _AdminManageStudentsScreenState extends State<AdminManageStudentsScreen> {
           context,
           body['message']?.toString() ?? 'تم حفظ التعديل',
         );
-
+        AdminRefreshNotifier.notify();
         await _loadData();
       } else {
         if (!mounted) return;
@@ -235,17 +249,15 @@ class _AdminManageStudentsScreenState extends State<AdminManageStudentsScreen> {
     final currentTeacherName = item['teacher_name']?.toString();
 
     final selectedTeacherId = _selectedTeacherByStudent[studentId];
-    final safeValue = _uniqueTeachers.any(
-      (t) => int.tryParse('${t['teacher_id'] ?? ''}') == selectedTeacherId,
-    )
+    final safeValue =
+        _uniqueTeachers.any(
+          (t) => int.tryParse('${t['teacher_id'] ?? ''}') == selectedTeacherId,
+        )
         ? selectedTeacherId
         : null;
 
     final dropdownItems = <DropdownMenuItem<int?>>[
-      const DropdownMenuItem<int?>(
-        value: null,
-        child: Text('بدون مُقرئ'),
-      ),
+      const DropdownMenuItem<int?>(value: null, child: Text('بدون مُقرئ')),
       ..._uniqueTeachers.map<DropdownMenuItem<int?>>((t) {
         final teacherId = int.tryParse('${t['teacher_id'] ?? ''}');
         return DropdownMenuItem<int?>(
@@ -268,9 +280,7 @@ class _AdminManageStudentsScreenState extends State<AdminManageStudentsScreen> {
             ),
             const SizedBox(height: 6),
             Text('البريد: ${item['email'] ?? ''}'),
-            Text(
-              'المستوى: ${AppLabels.level(item['level']?.toString())}',
-            ),
+            Text('المستوى: ${AppLabels.level(item['level']?.toString())}'),
             Text(
               'القراءة: ${AppLabels.qiraa(item['reading_type']?.toString())}',
             ),
@@ -282,14 +292,26 @@ class _AdminManageStudentsScreenState extends State<AdminManageStudentsScreen> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<int?>(
-              value: safeValue,
+              initialValue: safeValue,
               isExpanded: true,
               decoration: const InputDecoration(
                 labelText: 'اختر المُقرئ',
                 border: OutlineInputBorder(),
               ),
               items: dropdownItems,
-              onChanged: (value) {
+              onChanged: (value) async {
+                if (value == null) {
+                  final confirm = await AppDialogs.showConfirm(
+                    context: context,
+                    title: 'تأكيد فك الربط',
+                    message: 'هل تريد إزالة المقرئ من هذا الطالب؟',
+                    confirmText: 'نعم',
+                    cancelText: 'إلغاء',
+                  );
+
+                  if (!confirm) return;
+                }
+
                 setState(() {
                   _selectedTeacherByStudent[studentId] = value;
                 });
@@ -299,8 +321,9 @@ class _AdminManageStudentsScreenState extends State<AdminManageStudentsScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed:
-                    studentId > 0 ? () => _saveAssignment(studentId) : null,
+                onPressed: studentId > 0
+                    ? () => _saveAssignment(studentId)
+                    : null,
                 child: const Text('حفظ التعديل'),
               ),
             ),
@@ -313,9 +336,7 @@ class _AdminManageStudentsScreenState extends State<AdminManageStudentsScreen> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     if (_error != null) {

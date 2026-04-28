@@ -4,6 +4,7 @@ import '../../core/network/api_client.dart';
 import '../../core/utils/app_labels.dart';
 import 'dart:async';
 import '../../core/utils/admin_refresh_notifier.dart';
+import '../../core/ui/app_snackbar.dart';
 
 class AdminDirectoryScreen extends StatefulWidget {
   const AdminDirectoryScreen({super.key});
@@ -27,12 +28,20 @@ class _AdminDirectoryScreenState extends State<AdminDirectoryScreen>
 
   StreamSubscription? _refreshSub;
 
+  int? _extractUserId(Map user) {
+    return user['user_id'] ??
+        user['id'] ??
+        user['student_id'] ??
+        user['teacher_id'];
+  }
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _loadData();
 
+    /// 🔥 تحديث فوري عند أي تغيير (حذف / استرجاع / قبول)
     _refreshSub = AdminRefreshNotifier.stream.listen((_) {
       if (mounted) {
         _loadData();
@@ -48,14 +57,14 @@ class _AdminDirectoryScreenState extends State<AdminDirectoryScreen>
   }
 
   Future<void> _loadData() async {
-    if (mounted) {
-      setState(() {
-        _loading = true;
-        _error = null;
-      });
-    }
-
     try {
+      if (mounted) {
+        setState(() {
+          _loading = true;
+          _error = null;
+        });
+      }
+
       final dio = await ApiClient.getInstance();
 
       final studentsRes = await dio.get('/admin/manage_students_data.php');
@@ -73,19 +82,17 @@ class _AdminDirectoryScreenState extends State<AdminDirectoryScreen>
         final studentsRaw = studentsBody['data']?['students'] as List? ?? [];
         final teachersRaw = teachersBody['data']?['teachers'] as List? ?? [];
 
-        final parsedStudents = studentsRaw
-            .whereType<Map>()
-            .map((e) => Map<String, dynamic>.from(e))
-            .toList();
-
-        final parsedTeachers = teachersRaw
-            .whereType<Map>()
-            .map((e) => Map<String, dynamic>.from(e))
-            .toList();
-
         setState(() {
-          students = parsedStudents;
-          teachers = parsedTeachers;
+          students = studentsRaw
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
+
+          teachers = teachersRaw
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
+
           _loading = false;
         });
       } else {
@@ -95,20 +102,172 @@ class _AdminDirectoryScreenState extends State<AdminDirectoryScreen>
         });
       }
     } on DioException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.response?.data is Map
-            ? e.response?.data['message']?.toString() ?? 'فشل الاتصال بالخادم'
-            : 'فشل الاتصال بالخادم';
-        _loading = false;
-      });
+      String message = 'فشل الاتصال بالخادم';
+
+      final data = e.response?.data;
+
+      if (data is Map) {
+        message = data['message']?.toString() ?? message;
+      } else if (data is String && data.isNotEmpty) {
+        message = data;
+      }
+
+      if (mounted) {
+        setState(() {
+          _error = message;
+          _loading = false;
+        });
+      }
     } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _error = 'حدث خطأ غير متوقع';
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = 'حدث خطأ غير متوقع';
+          _loading = false;
+        });
+      }
     }
+  }
+
+  // ================================
+  // 🔥 حذف المستخدم (نهائي ومحسّن)
+  // ================================
+  Future<void> _deleteUser(Map user) async {
+    final userId = _extractUserId(user);
+
+    if (userId == null) {
+      AppSnackBar.error(context, 'تعذر تحديد المستخدم');
+      return;
+    }
+
+    try {
+      final dio = await ApiClient.getInstance();
+
+      // 🔥 تحقق قبل الحذف
+      final checkRes = await dio.post(
+        '/admin/manage_user.php',
+        data: FormData.fromMap({
+          'user_id': userId.toString(),
+          'action': 'check_delete',
+        }),
+      );
+
+      final body = checkRes.data;
+
+      if (body is! Map) {
+        AppSnackBar.error(context, 'استجابة غير صالحة من الخادم');
+        return;
+      }
+
+      if (body['ok'] != true) {
+        AppSnackBar.error(
+          context,
+          body['message']?.toString() ?? 'لا يمكن الحذف',
+        );
+        return;
+      }
+
+      // 🔥 طلب السبب
+      final controller = TextEditingController();
+
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (_) {
+          return AlertDialog(
+            title: const Text('سبب الحذف'),
+            content: TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                hintText: 'اكتب سبب الحذف...',
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('إلغاء'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  if (controller.text.trim().isEmpty) return;
+                  Navigator.pop(context, true);
+                },
+                child: const Text('حذف'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (confirmed != true) return;
+
+      // 🔥 تنفيذ الحذف
+      final res = await dio.post(
+        '/admin/manage_user.php',
+        data: FormData.fromMap({
+          'user_id': userId.toString(),
+          'action': 'delete',
+          'reason': controller.text.trim(),
+        }),
+      );
+
+      final resBody = res.data;
+
+      if (resBody is Map && resBody['ok'] == true) {
+        AppSnackBar.success(context, 'تم الحذف');
+
+        /// 🔥 تحديث فوري لكل الشاشات
+        AdminRefreshNotifier.notify();
+
+        /// 🔥 تحديث فوري داخل نفس الشاشة (بدون انتظار API)
+        setState(() {
+          students.removeWhere((u) => _extractUserId(u) == userId);
+          teachers.removeWhere((u) => _extractUserId(u) == userId);
+        });
+      } else {
+        AppSnackBar.error(
+          context,
+          resBody is Map
+              ? resBody['message']?.toString() ?? 'فشل الحذف'
+              : 'فشل الحذف',
+        );
+      }
+    } on DioException catch (e) {
+      String message = 'فشل الاتصال بالخادم';
+
+      final data = e.response?.data;
+
+      if (data is Map) {
+        message = data['message']?.toString() ?? message;
+      } else if (data is String && data.isNotEmpty) {
+        message = data;
+      }
+
+      AppSnackBar.error(context, message);
+    } catch (_) {
+      AppSnackBar.error(context, 'خطأ غير متوقع');
+    }
+  }
+
+  void _showUserOptions(Map user) {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.red),
+                title: const Text('حذف'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _deleteUser(user);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   List<Map<String, dynamic>> get filteredStudents {
@@ -117,9 +276,7 @@ class _AdminDirectoryScreenState extends State<AdminDirectoryScreen>
 
     return students.where((m) {
       return (m['name']?.toString().toLowerCase().contains(q) ?? false) ||
-          (m['email']?.toString().toLowerCase().contains(q) ?? false) ||
-          (m['reading_type']?.toString().toLowerCase().contains(q) ?? false) ||
-          (m['teacher_name']?.toString().toLowerCase().contains(q) ?? false);
+          (m['email']?.toString().toLowerCase().contains(q) ?? false);
     }).toList();
   }
 
@@ -129,62 +286,67 @@ class _AdminDirectoryScreenState extends State<AdminDirectoryScreen>
 
     return teachers.where((m) {
       return (m['name']?.toString().toLowerCase().contains(q) ?? false) ||
-          (m['email']?.toString().toLowerCase().contains(q) ?? false) ||
-          (m['readings']?.toString().toLowerCase().contains(q) ?? false);
+          (m['email']?.toString().toLowerCase().contains(q) ?? false);
     }).toList();
   }
 
   Widget _studentCard(Map<String, dynamic> item) {
     final teacherName = item['teacher_name']?.toString().trim();
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              item['name']?.toString() ?? '',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 6),
-            Text('البريد: ${item['email'] ?? ''}'),
-            Text('المستوى: ${AppLabels.level(item['level']?.toString())}'),
-            Text(
-              'القراءة: ${AppLabels.qiraa(item['reading_type']?.toString())}',
-            ),
-            Text(
-              'الفترة المفضلة: ${AppLabels.period(item['preferred_period']?.toString())}',
-            ),
-            Text(
-              'المُقرئ: ${teacherName == null || teacherName.isEmpty ? 'غير مرتبط' : teacherName}',
-            ),
-          ],
+    return GestureDetector(
+      onTap: () => _showUserOptions(item),
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 12),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                item['name'] ?? '',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 6),
+              Text('البريد: ${item['email']}'),
+              Text('المستوى: ${AppLabels.level(item['level']?.toString())}'),
+              Text(
+                'القراءة: ${AppLabels.qiraa(item['reading_type']?.toString())}',
+              ),
+              Text(
+                'الفترة: ${AppLabels.period(item['preferred_period']?.toString())}',
+              ),
+              Text(
+                'المُقرئ: ${teacherName == null || teacherName.isEmpty ? 'غير مرتبط' : teacherName}',
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _teacherCard(Map<String, dynamic> item) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              item['name']?.toString() ?? '',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 6),
-            Text('البريد: ${item['email'] ?? ''}'),
-            Text('القراءات: ${AppLabels.qiraatText(item['readings'])}'),
-            Text(
-              'فترات التوفر: ${AppLabels.periodsText(item['available_periods'])}',
-            ),
-          ],
+    return GestureDetector(
+      onTap: () => _showUserOptions(item),
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 12),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                item['name'] ?? '',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 6),
+              Text('البريد: ${item['email']}'),
+              Text('القراءات: ${AppLabels.qiraatText(item['readings'])}'),
+              Text(
+                'الفترات: ${AppLabels.periodsText(item['available_periods'])}',
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -196,7 +358,7 @@ class _AdminDirectoryScreenState extends State<AdminDirectoryScreen>
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          padding: const EdgeInsets.all(16),
           child: TextField(
             decoration: const InputDecoration(
               hintText: 'ابحث عن طالب...',
@@ -211,29 +373,12 @@ class _AdminDirectoryScreenState extends State<AdminDirectoryScreen>
           ),
         ),
         Expanded(
-          child: RefreshIndicator(
-            onRefresh: _loadData,
-            child: list.isEmpty
-                ? ListView(
-                    physics: const AlwaysScrollableScrollPhysics(
-                      parent: BouncingScrollPhysics(),
-                    ),
-                    children: const [
-                      SizedBox(height: 120),
-                      Center(child: Text('لا يوجد طلاب')),
-                    ],
-                  )
-                : ListView.builder(
-                    physics: const AlwaysScrollableScrollPhysics(
-                      parent: BouncingScrollPhysics(),
-                    ),
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                    itemCount: list.length,
-                    itemBuilder: (context, index) {
-                      return _studentCard(list[index]);
-                    },
-                  ),
-          ),
+          child: list.isEmpty
+              ? const Center(child: Text('لا يوجد طلاب'))
+              : ListView.builder(
+                  itemCount: list.length,
+                  itemBuilder: (_, i) => _studentCard(list[i]),
+                ),
         ),
       ],
     );
@@ -245,7 +390,7 @@ class _AdminDirectoryScreenState extends State<AdminDirectoryScreen>
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          padding: const EdgeInsets.all(16),
           child: TextField(
             decoration: const InputDecoration(
               hintText: 'ابحث عن مُقرئ...',
@@ -260,29 +405,12 @@ class _AdminDirectoryScreenState extends State<AdminDirectoryScreen>
           ),
         ),
         Expanded(
-          child: RefreshIndicator(
-            onRefresh: _loadData,
-            child: list.isEmpty
-                ? ListView(
-                    physics: const AlwaysScrollableScrollPhysics(
-                      parent: BouncingScrollPhysics(),
-                    ),
-                    children: const [
-                      SizedBox(height: 120),
-                      Center(child: Text('لا يوجد مُقرئون')),
-                    ],
-                  )
-                : ListView.builder(
-                    physics: const AlwaysScrollableScrollPhysics(
-                      parent: BouncingScrollPhysics(),
-                    ),
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                    itemCount: list.length,
-                    itemBuilder: (context, index) {
-                      return _teacherCard(list[index]);
-                    },
-                  ),
-          ),
+          child: list.isEmpty
+              ? const Center(child: Text('لا يوجد مُقرئون'))
+              : ListView.builder(
+                  itemCount: list.length,
+                  itemBuilder: (_, i) => _teacherCard(list[i]),
+                ),
         ),
       ],
     );
@@ -294,29 +422,17 @@ class _AdminDirectoryScreenState extends State<AdminDirectoryScreen>
     }
 
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Text(
-            _error!,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.red),
-          ),
-        ),
-      );
+      return Center(child: Text(_error!));
     }
 
     return Column(
       children: [
-        Material(
-          color: Colors.white,
-          child: TabBar(
-            controller: _tabController,
-            tabs: const [
-              Tab(text: 'الطلاب'),
-              Tab(text: 'المُقرئون'),
-            ],
-          ),
+        TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'الطلاب'),
+            Tab(text: 'المُقرئون'),
+          ],
         ),
         Expanded(
           child: TabBarView(
@@ -330,9 +446,6 @@ class _AdminDirectoryScreenState extends State<AdminDirectoryScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF6F8FB),
-      body: _buildBody(),
-    );
+    return Scaffold(body: _buildBody());
   }
 }

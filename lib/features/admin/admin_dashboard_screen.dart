@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
@@ -7,13 +8,13 @@ import '../../core/ui/app_snackbar.dart';
 import '../../core/utils/app_labels.dart';
 import '../../core/widgets/status_badge.dart';
 import '../../core/utils/admin_refresh_notifier.dart';
+import '../../core/widgets/app_dialogs.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
 
   @override
-  State<AdminDashboardScreen> createState() =>
-      _AdminDashboardScreenState();
+  State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
 }
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
@@ -24,14 +25,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   StreamSubscription? _refreshSub;
 
   @override
+  @override
   void initState() {
     super.initState();
     _loadDashboard();
 
-    _refreshSub = AdminRefreshNotifier.stream.listen((_) {
-      if (mounted) {
-        _loadDashboard();
-      }
+    _refreshSub = AdminRefreshNotifier.stream.listen((_) async {
+      if (!mounted) return;
+
+      await _loadDashboard();
+
+      setState(() {}); // 👈 هذا هو السطر السحري
     });
   }
 
@@ -94,8 +98,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
       if (body is Map && body['ok'] == true) {
         if (mounted) {
-          setState(() {
+          /*setState(() {
             _data = Map<String, dynamic>.from(body['data'] as Map);
+            _data = Map<String, dynamic>.from(_data!);
+          });*/
+          setState(() {
+            _data = jsonDecode(jsonEncode(body['data']));
           });
         }
       } else {
@@ -208,6 +216,145 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     }
   }
 
+  /*Future<void> _manageUser(int userId, String action) async {
+    final confirmed = await AppDialogs.showConfirm(
+      context: context,
+      title: 'تأكيد',
+      message: action == 'delete'
+          ? 'هل أنت متأكد من الحذف؟'
+          : 'تغيير الحالة إلى قيد المراجعة؟',
+      confirmText: 'نعم',
+      cancelText: 'إلغاء',
+    );
+
+    if (!confirmed) return;
+
+    try {
+      final dio = await ApiClient.getInstance();
+
+      final response = await dio.post(
+        '/admin/manage_user.php',
+        data: {'user_id': userId, 'action': action},
+      );
+
+      final body = response.data;
+
+      if (body is Map && body['ok'] == true) {
+        if (!mounted) return;
+
+        AppSnackBar.success(
+          context,
+          body['message']?.toString() ?? 'تم التنفيذ',
+        );
+
+        AdminRefreshNotifier.notify();
+        return;
+      }
+
+      if (!mounted) return;
+      AppSnackBar.error(context, 'فشل العملية');
+    } catch (_) {
+      if (!mounted) return;
+      AppSnackBar.error(context, 'خطأ في الاتصال');
+    }
+  }*/
+
+  Future<void> _manageUser(
+    int userId,
+    String action, {
+    required String role,
+  }) async {
+    String? reason;
+
+    // =========================
+    // ✍️ طلب سبب الحذف
+    // =========================
+    if (action == 'delete') {
+      final controller = TextEditingController();
+
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (_) {
+          return AlertDialog(
+            title: const Text('سبب الحذف'),
+            content: TextField(
+              controller: controller,
+              maxLines: 3,
+              decoration: const InputDecoration(hintText: 'اكتب سبب الحذف...'),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('إلغاء'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  if (controller.text.trim().isEmpty) return;
+                  Navigator.pop(context, true);
+                },
+                child: const Text('تأكيد'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (confirmed != true) return;
+
+      reason = controller.text.trim();
+    } else {
+      // =========================
+      // 🔄 تغيير الحالة فقط
+      // =========================
+      final confirmed = await AppDialogs.showConfirm(
+        context: context,
+        title: 'تأكيد',
+        message: 'تغيير الحالة إلى قيد المراجعة؟',
+        confirmText: 'نعم',
+        cancelText: 'إلغاء',
+      );
+
+      if (!confirmed) return;
+    }
+
+    // =========================
+    // 📡 إرسال الطلب
+    // =========================
+    try {
+      final dio = await ApiClient.getInstance();
+
+      final response = await dio.post(
+        '/admin/manage_user.php',
+        data: {
+          'user_id': userId,
+          'action': action,
+          'role': role, // ✅ مهم جدًا
+          'reason': reason, // ✅ للحذف
+        },
+      );
+
+      final body = response.data;
+
+      if (body is Map && body['ok'] == true) {
+        if (!mounted) return;
+
+        AppSnackBar.success(
+          context,
+          body['message']?.toString() ?? 'تم التنفيذ',
+        );
+
+        AdminRefreshNotifier.notify();
+        return;
+      }
+
+      if (!mounted) return;
+      AppSnackBar.error(context, body['message'] ?? 'فشل العملية');
+    } catch (_) {
+      if (!mounted) return;
+      AppSnackBar.error(context, 'خطأ في الاتصال');
+    }
+  }
+
   double _statsCardExtent(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
     if (width < 380) return 166;
@@ -230,21 +377,68 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     return const EdgeInsets.fromLTRB(16, 16, 16, 32);
   }
 
-  Widget _buildStudentActions(BuildContext context, Map m) {
+  /*Widget _buildStudentActions(BuildContext context, Map m) {
     final targetId = int.parse((m['student_id'] ?? m['id']).toString());
 
     return _ResponsiveActionButtons(
       onApprove: () => _changeStudentStatus(targetId, 'approve'),
       onReject: () => _changeStudentStatus(targetId, 'reject'),
     );
+  }*/
+  Widget _buildStudentActions(BuildContext context, Map m) {
+    final targetId = int.parse((m['student_id'] ?? m['id']).toString());
+
+    return Row(
+      children: [
+        Expanded(
+          child: _ResponsiveActionButtons(
+            onApprove: () => _changeStudentStatus(targetId, 'approve'),
+            onReject: () => _changeStudentStatus(targetId, 'reject'),
+          ),
+        ),
+        _adminMenu(targetId, 'student'),
+      ],
+    );
   }
 
-  Widget _buildTeacherActions(BuildContext context, Map m) {
+  /*Widget _buildTeacherActions(BuildContext context, Map m) {
     final targetId = int.parse((m['teacher_id'] ?? m['id']).toString());
 
     return _ResponsiveActionButtons(
       onApprove: () => _changeTeacherStatus(targetId, 'approve'),
       onReject: () => _changeTeacherStatus(targetId, 'reject'),
+    );
+  }*/
+  Widget _buildTeacherActions(BuildContext context, Map m) {
+    final targetId = int.parse((m['teacher_id'] ?? m['id']).toString());
+
+    return Row(
+      children: [
+        Expanded(
+          child: _ResponsiveActionButtons(
+            onApprove: () => _changeTeacherStatus(targetId, 'approve'),
+            onReject: () => _changeTeacherStatus(targetId, 'reject'),
+          ),
+        ),
+        _adminMenu(targetId, 'teacher'),
+      ],
+    );
+  }
+
+  Widget _adminMenu(int userId, String role) {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert),
+      onSelected: (value) {
+        if (value == 'pending') {
+          _manageUser(userId, 'pending', role: role);
+        } else if (value == 'delete') {
+          _manageUser(userId, 'delete', role: role);
+        }
+      },
+      itemBuilder: (context) => const [
+        PopupMenuItem(value: 'pending', child: Text('قيد المراجعة')),
+        PopupMenuItem(value: 'delete', child: Text('حذف')),
+      ],
     );
   }
 
@@ -272,11 +466,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
     final stats = _data?['stats'] as Map<String, dynamic>?;
     final topTeachers = (_data?['top_teachers'] as List?) ?? [];
-    final pendingStudents = (_data?['pending_students'] as List?) ?? [];
-    final pendingTeachers = (_data?['pending_teachers'] as List?) ?? [];
+    //final pendingStudents = (_data?['pending_students'] as List?) ?? [];
+    final pendingStudents = (_data?['pending_students'] as List? ?? [])
+    .map((e) => Map<String, dynamic>.from(e))
+    .toList();
+    //final pendingTeachers = (_data?['pending_teachers'] as List?) ?? [];
+    final pendingTeachers = (_data?['pending_teachers'] as List? ?? [])
+    .map((e) => Map<String, dynamic>.from(e))
+    .toList();
     final unassignedStudents =
         (_data?['approved_students_unassigned'] as List?) ?? [];
-
+    print("UI pendingStudents: $pendingStudents");
     return Scaffold(
       backgroundColor: const Color(0xFFF6F8FB),
       body: RefreshIndicator(
@@ -310,6 +510,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ),
             const SizedBox(height: 16),
             _buildSimpleSection(
+              key: ValueKey(pendingStudents.length), // 👈 مهم جدًا
               title: 'طلبات الطلاب المعلقة',
               icon: Icons.school_outlined,
               items: pendingStudents,
@@ -328,7 +529,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   color: const Color(0xFFE0F2FE),
                   iconColor: Colors.lightBlue,
                   trailing: _buildOptionalStatusBadge(m['status']),
-                  actionsWidget: _buildStudentActions(context, m),
+                  //actionsWidget: _buildStudentActions(context, m),
                 );
               },
             ),
@@ -353,10 +554,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   color: const Color(0xFFF3E8FF),
                   iconColor: Colors.deepPurple,
                   trailing: _buildOptionalStatusBadge(m['status']),
-                  actionsWidget: _buildTeacherActions(context, m),
+                  //actionsWidget: _buildTeacherActions(context, m),
                 );
               },
             ),
+
             const SizedBox(height: 16),
             _buildSimpleSection(
               title: 'طلاب معتمدون بلا مُقرئ',
@@ -477,6 +679,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Widget _buildSimpleSection({
+    Key? key,
     required String title,
     required IconData icon,
     required List items,
@@ -515,7 +718,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               child: Text(emptyText),
             )
           else
-            ...items.map(itemBuilder),
+            //...items.map(itemBuilder),
+            ...items.map((e) => itemBuilder(e)).toList(),
         ],
       ),
     );

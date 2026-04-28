@@ -10,6 +10,8 @@ import 'admin_pending_requests_screen.dart';
 import 'admin_assignments_screen.dart';
 import 'admin_manage_students_screen.dart';
 import 'admin_directory_screen.dart';
+import 'admin_deleted_users_screen.dart'; // 🔥 جديد
+
 import '../profile/profile_screen.dart';
 
 class AdminHomeShell extends StatefulWidget {
@@ -31,6 +33,7 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
     AdminAssignmentsScreen(),
     AdminManageStudentsScreen(),
     AdminDirectoryScreen(),
+    AdminDeletedUsersScreen(), // 🔥 جديد
   ];
 
   final List<String> _titles = const [
@@ -41,6 +44,7 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
     'الربط',
     'إدارة الطلاب',
     'الدليل',
+    'المحذوفون', // 🔥 جديد
   ];
 
   @override
@@ -163,7 +167,7 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
       child: SafeArea(
         top: false,
         child: SizedBox(
-          height: 86, // ✅ تم رفعه لحل overflow
+          height: 86,
           child: SingleChildScrollView(
             controller: _navScrollController,
             scrollDirection: Axis.horizontal,
@@ -212,6 +216,12 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
                   selectedIcon: Icons.menu_book,
                   label: 'الدليل',
                   index: 6,
+                ),
+                _buildNavItem(
+                  icon: Icons.delete_outline,
+                  selectedIcon: Icons.delete,
+                  label: 'المحذوفون',
+                  index: 7,
                 ),
               ],
             ),

@@ -1,5 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+
+import 'dart:async';
+import '../../core/utils/admin_refresh_notifier.dart';
 import '../../core/network/api_client.dart';
 import '../../core/utils/app_labels.dart';
 import '../../core/widgets/app_dialogs.dart';
@@ -17,13 +20,26 @@ class _AdminPendingRequestsScreenState
     extends State<AdminPendingRequestsScreen> {
   bool _loading = true;
   String? _error;
-  List students = [];
-  List teachers = [];
+  List<Map<String, dynamic>> students = [];
+  List<Map<String, dynamic>> teachers = [];
+  StreamSubscription? _refreshSub;
 
   @override
   void initState() {
     super.initState();
     _loadPendingRequests();
+
+    _refreshSub = AdminRefreshNotifier.stream.listen((_) {
+      if (mounted) {
+        _loadPendingRequests(); // 🔥 إعادة تحميل الطلبات
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadPendingRequests() async {
@@ -38,11 +54,17 @@ class _AdminPendingRequestsScreenState
       final dio = await ApiClient.getInstance();
       final response = await dio.get('/admin/pending_requests.php');
       final body = response.data;
-
+      print("PENDING API RESPONSE: $body");
       if (body is Map && body['ok'] == true) {
         setState(() {
-          students = body['data']?['pending_students'] as List? ?? [];
-          teachers = body['data']?['pending_teachers'] as List? ?? [];
+          //students = body['data']?['pending_students'] as List? ?? [];
+          students = (body['data']?['pending_students'] as List? ?? [])
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
+          //teachers = body['data']?['pending_teachers'] as List? ?? [];
+          teachers = (body['data']?['pending_teachers'] as List? ?? [])
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
           _loading = false;
         });
       } else {
@@ -100,6 +122,7 @@ class _AdminPendingRequestsScreenState
         if (!mounted) return;
         AppSnackBar.success(context, 'تم التحديث');
         await _loadPendingRequests();
+        AdminRefreshNotifier.notify();
         return;
       }
 
