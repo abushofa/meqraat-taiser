@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/network/api_client.dart';
@@ -13,6 +14,8 @@ import 'admin_directory_screen.dart';
 import 'admin_deleted_users_screen.dart'; // 🔥 جديد
 
 import '../profile/profile_screen.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import '../../core/storage/session_storage.dart';
 
 class AdminHomeShell extends StatefulWidget {
   const AdminHomeShell({super.key});
@@ -56,8 +59,22 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
   Future<void> _logout() async {
     try {
       final dio = await ApiClient.getInstance();
-      await dio.post('/logout.php');
-    } catch (_) {}
+
+      await dio.post(
+        '/logout.php',
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+
+      // حذف التوكن من الجهاز
+      try {
+        await FirebaseMessaging.instance.deleteToken();
+      } catch (_) {}
+    } catch (_) {
+      // لا نكسر تجربة المستخدم
+    }
+
+    // تنظيف الجلسة محليًا
+    await SessionStorage.clear();
 
     if (!mounted) return;
 
@@ -73,9 +90,7 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
     } else if (value == 'profile') {
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (_) => const ProfileScreen(),
-        ),
+        MaterialPageRoute(builder: (_) => const ProfileScreen()),
       );
     }
   }
@@ -137,8 +152,7 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
                   softWrap: false,
                   style: TextStyle(
                     fontSize: 11,
-                    fontWeight:
-                        isSelected ? FontWeight.w700 : FontWeight.w600,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
                     color: isSelected
                         ? const Color(0xFF0F766E)
                         : const Color(0xFF6B7280),
@@ -275,10 +289,7 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
           ),
         ],
       ),
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _pages,
-      ),
+      body: IndexedStack(index: _currentIndex, children: _pages),
       bottomNavigationBar: _buildBottomBar(),
     );
   }

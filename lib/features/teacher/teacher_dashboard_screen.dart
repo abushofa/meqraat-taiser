@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -289,7 +291,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       try {
         await _startRecording(sessionId);
       } catch (e) {
-        debugPrint('START RECORDING ERROR: $e');
+        //debugPrint('START RECORDING ERROR: $e');
       }
     });
 
@@ -304,11 +306,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           title: title,
           displayName: displayName,
           isTeacher: true,
+          sessionId: sessionId,
           onEndSession: () async {
             try {
               await _stopRecording(sessionId);
             } catch (e) {
-              debugPrint('STOP RECORDING ERROR: $e');
+              //debugPrint('STOP RECORDING ERROR: $e');
             }
 
             await _endSessionByApi(sessionId);
@@ -331,20 +334,64 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       final response = await dio.post(
         '/teacher/start_session.php',
         data: {'student_id': studentId, 'recording_enabled': 1},
+        options: Options(
+          responseType: ResponseType.plain, // ✅ مهم جدًا لمنع crash
+        ),
       );
 
-      final body = response.data;
+      final bodyRaw = response.data;
+      Map? body;
+
+      try {
+        body = bodyRaw is String ? jsonDecode(bodyRaw) : bodyRaw;
+      } catch (_) {
+        if (!mounted) return;
+        AppSnackBar.error(context, 'خطأ في استجابة السيرفر');
+        return;
+      }
 
       if (body is Map && body['ok'] == true) {
         final session = body['data']?['session'];
         final agora = session?['agora'];
 
         if (session != null && agora is Map && mounted) {
-          await _openAgoraCall(
-            agora: Map<String, dynamic>.from(agora),
-            title: 'جلسة $studentName',
-            sessionId: int.parse(session['id'].toString()),
-            displayName: studentName,
+          final appId = agora['app_id']?.toString() ?? '';
+          final channel = agora['channel']?.toString() ?? '';
+          final token = agora['teacher_token']?.toString() ?? '';
+          final uid = int.tryParse(agora['teacher_uid']?.toString() ?? '') ?? 0;
+
+          final sessionId = int.tryParse(session['id']?.toString() ?? '') ?? 0;
+
+          // ✅ حماية قوية (تمنع fatal error)
+          if (appId.isEmpty || channel.isEmpty || token.isEmpty || uid == 0) {
+            AppSnackBar.error(context, 'بيانات Agora ناقصة');
+            return;
+          }
+
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => AgoraCallScreen(
+                appId: appId,
+                token: token,
+                channelName: channel,
+                uid: uid,
+                title: 'جلسة $studentName',
+                displayName: studentName,
+                isTeacher: true,
+                sessionId: sessionId,
+                // ✅ إنهاء الجلسة عند الخروج (نفس شاشة الطلاب)
+                onEndSession: () async {
+                  try {
+                    final dio = await ApiClient.getInstance();
+                    await dio.post(
+                      '/teacher/end_session.php',
+                      data: {'session_id': sessionId},
+                    );
+                  } catch (_) {}
+                },
+              ),
+            ),
           );
         } else {
           if (!mounted) return;
@@ -411,7 +458,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         );
       }
     } on DioException catch (e) {
-      debugPrint('GROUP START DIO ERROR: ${e.response?.data}');
+      //debugPrint('GROUP START DIO ERROR: ${e.response?.data}');
       if (!mounted) return;
       AppSnackBar.error(
         context,
@@ -420,7 +467,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             : 'فشل الاتصال بالخادم',
       );
     } catch (e) {
-      debugPrint('GROUP START UNKNOWN ERROR: $e');
+      //debugPrint('GROUP START UNKNOWN ERROR: $e');
       if (!mounted) return;
       AppSnackBar.error(context, 'فشل بدء الجلسة الجماعية');
     }
@@ -781,11 +828,26 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                   ),
                 ),
                 onPressed: () {
+                  final hasActiveSession = (_data?['active_session'] != null);
+
+                  if (hasActiveSession) {
+                    AppSnackBar.error(context, 'لديك جلسة نشطة، تابعها أولاً');
+
+                    return;
+                  }
+
                   _startIndividualSession(
+                    int.parse(s['student_id'].toString()),
+
+                    (s['name'] ?? '').toString(),
+
+                    teacherName,
+                  );
+                  /*_startIndividualSession(
                     int.parse(s['student_id'].toString()),
                     (s['name'] ?? '').toString(),
                     teacherName,
-                  );
+                  );*/
                 },
               ),
             ),

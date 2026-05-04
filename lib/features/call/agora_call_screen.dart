@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/network/api_client.dart';
+
 class AgoraCallScreen extends StatefulWidget {
   final String appId;
   final String token;
@@ -11,6 +13,7 @@ class AgoraCallScreen extends StatefulWidget {
   final String displayName; // اسم الطرف الآخر
   final bool isTeacher;
   final Future<void> Function()? onEndSession;
+  final int? sessionId;
 
   const AgoraCallScreen({
     super.key,
@@ -22,6 +25,7 @@ class AgoraCallScreen extends StatefulWidget {
     required this.displayName,
     this.isTeacher = false,
     this.onEndSession,
+    this.sessionId,
   });
 
   @override
@@ -57,6 +61,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
 
   Timer? _remoteSpeakingResetTimer;
   Timer? _localSpeakingResetTimer;
+   Timer? _pingTimer;
 
   @override
   void initState() {
@@ -78,6 +83,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
     ).animate(CurvedAnimation(parent: _pulseController, curve: Curves.easeOut));
 
     _initAgora();
+    _startPing();
   }
 
   String _sanitizeAppId(String value) {
@@ -91,6 +97,27 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
   String _sanitizeToken(String value) {
     return value.trim();
   }
+
+  void _startPing() {
+  if (!widget.isTeacher) return;
+
+  _pingTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
+    try {
+      // لازم تمرر session_id في arguments
+      /*final sessionId = (ModalRoute.of(context)?.settings.arguments
+          as Map?)?['session_id'];*/
+      final sessionId = widget.sessionId;
+
+      if (sessionId == null) return;
+
+      final dio = await ApiClient.getInstance();
+      await dio.post(
+        '/teacher/ping_session.php',
+        data: {'session_id': sessionId},
+      );
+    } catch (_) {}
+  });
+}
 
   String _formatDuration(int seconds) {
     final hours = (seconds ~/ 3600).toString().padLeft(2, '0');
@@ -220,34 +247,16 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
           onJoinChannelSuccess: (connection, elapsed) async {
             if (!mounted) return;
 
-            await _engine.setEnableSpeakerphone(true); // 👈 هنا
+            await _engine.setEnableSpeakerphone(true);
 
             setState(() {
+              _joined = true; // 🔥 هذا هو الحل الرئيسي
               _errorText = null;
               _connectionStatus = 'متصل، بانتظار الطرف الآخر...';
             });
 
             _startSessionTimer();
           },
-          /*onJoinChannelSuccess: (connection, elapsed) {
-            debugPrint('AGORA JOIN SUCCESS');
-            if (!mounted) return;
-            setState(() {
-              _joined = true;
-              _errorText = null;
-              _connectionStatus = 'متصل، بانتظار الطرف الآخر...';
-            });
-            _startSessionTimer();
-          },*/
-          /*onUserJoined: (connection, remoteUid, elapsed) {
-            debugPrint('AGORA REMOTE JOINED: $remoteUid');
-            if (!mounted) return;
-            setState(() {
-              _remoteUid = remoteUid;
-              _errorText = null;
-              _connectionStatus = 'الجلسة متصلة';
-            });
-          },*/
           onUserJoined: (connection, remoteUid, elapsed) async {
             if (!mounted) return;
 
@@ -399,7 +408,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
         _engineReady = true;
         _connectionStatus = 'جارٍ الاتصال...';
       });
-
+      debugPrint('AGORA JOIN PARAMS => channel: $channelName | uid: $uid | token length: ${token.length}');
       await _engine.joinChannel(
         token: token,
         channelId: channelName,
@@ -770,6 +779,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
     if (_engineCreated) {
       _engine.release();
     }
+    _pingTimer?.cancel();
     super.dispose();
   }
 

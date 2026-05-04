@@ -466,17 +466,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
     final stats = _data?['stats'] as Map<String, dynamic>?;
     final topTeachers = (_data?['top_teachers'] as List?) ?? [];
-    //final pendingStudents = (_data?['pending_students'] as List?) ?? [];
-    final pendingStudents = (_data?['pending_students'] as List? ?? [])
-    .map((e) => Map<String, dynamic>.from(e))
-    .toList();
-    //final pendingTeachers = (_data?['pending_teachers'] as List?) ?? [];
+     final pendingStudents = (_data?['pending_students'] as List? ?? [])
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
     final pendingTeachers = (_data?['pending_teachers'] as List? ?? [])
-    .map((e) => Map<String, dynamic>.from(e))
-    .toList();
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
     final unassignedStudents =
         (_data?['approved_students_unassigned'] as List?) ?? [];
-    print("UI pendingStudents: $pendingStudents");
     return Scaffold(
       backgroundColor: const Color(0xFFF6F8FB),
       body: RefreshIndicator(

@@ -1,8 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:quran_app/features/call/agora_call_screen.dart';
 import '../../core/network/api_client.dart';
 import '../../core/ui/app_snackbar.dart';
-import 'jitsi_room_screen.dart';
 import '../../core/utils/app_labels.dart';
 
 class TeacherSessionsScreen extends StatefulWidget {
@@ -93,22 +93,35 @@ class _TeacherSessionsScreenState extends State<TeacherSessionsScreen> {
   }
 
   Future<void> _continueSession(Map session) async {
-    final meetingUrl = session['meeting_url']?.toString() ?? '';
-    final sessionId = int.tryParse(session['id'].toString());
+    final channel = session['agora_channel']?.toString() ?? '';
+    final token = session['teacher_token']?.toString() ?? '';
+    final uidRaw = session['teacher_uid'];
+    final appId = session['app_id']?.toString() ?? '';
 
-    if (meetingUrl.isEmpty || sessionId == null) return;
+    final uid = int.tryParse(uidRaw?.toString() ?? '');
+
+    if (channel.isEmpty || token.isEmpty || uid == null || appId.isEmpty) {
+      if (!mounted) return;
+      AppSnackBar.error(context, 'بيانات الجلسة غير مكتملة');
+      return;
+    }
 
     if (!mounted) return;
 
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => JitsiRoomScreen(
-          roomUrl: meetingUrl,
+        builder: (_) => AgoraCallScreen(
+          appId: appId,
+          token: token,
+          channelName: channel,
+          uid: uid,
           title: session['session_type'] == 'group'
               ? 'الجلسة الجماعية'
               : 'جلسة ${session['student_name'] ?? ''}',
-          sessionId: sessionId,
+          displayName: session['student_name']?.toString() ?? 'الطالب',
+          isTeacher: true,
+          sessionId: int.tryParse(session['id'].toString()),
         ),
       ),
     );
@@ -136,9 +149,7 @@ class _TeacherSessionsScreenState extends State<TeacherSessionsScreen> {
 
         AppSnackBar.error(
           context,
-          body is Map
-              ? body['message']?.toString() ?? 'حدث خطأ'
-              : 'حدث خطأ',
+          body is Map ? body['message']?.toString() ?? 'حدث خطأ' : 'حدث خطأ',
         );
       }
     } catch (_) {

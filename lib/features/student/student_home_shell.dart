@@ -1,4 +1,6 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:quran_app/core/storage/session_storage.dart';
 
 import '../../core/notifications/notification_navigation_service.dart';
 import '../../core/network/api_client.dart';
@@ -9,14 +11,12 @@ import 'student_sessions_screen.dart';
 import 'student_messages_screen.dart';
 import 'student_notes_screen.dart';
 import '../profile/profile_screen.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class StudentHomeShell extends StatefulWidget {
   final int initialTabIndex;
 
-  const StudentHomeShell({
-    super.key,
-    this.initialTabIndex = 0,
-  });
+  const StudentHomeShell({super.key, this.initialTabIndex = 0});
 
   @override
   State<StudentHomeShell> createState() => _StudentHomeShellState();
@@ -48,8 +48,9 @@ class _StudentHomeShellState extends State<StudentHomeShell> {
 
   @override
   void dispose() {
-    NotificationNavigationService.studentTabToOpen
-        .removeListener(_onTabRequested);
+    NotificationNavigationService.studentTabToOpen.removeListener(
+      _onTabRequested,
+    );
     super.dispose();
   }
 
@@ -69,15 +70,27 @@ class _StudentHomeShellState extends State<StudentHomeShell> {
   Future<void> _logout() async {
     try {
       final dio = await ApiClient.getInstance();
-      await dio.post('/logout.php');
-    } catch (_) {}
+
+      await dio.post(
+        '/logout.php',
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+
+      // حذف التوكن من الجهاز
+      try {
+        await FirebaseMessaging.instance.deleteToken();
+      } catch (_) {}
+    } catch (_) {
+      // لا نكسر تجربة المستخدم
+    }
+
+    // تنظيف الجلسة محليًا
+    await SessionStorage.clear();
 
     if (!mounted) return;
 
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(
-        builder: (_) => const LoginScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
       (route) => false,
     );
   }
@@ -88,9 +101,7 @@ class _StudentHomeShellState extends State<StudentHomeShell> {
     } else if (value == 'profile') {
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (_) => const ProfileScreen(),
-        ),
+        MaterialPageRoute(builder: (_) => const ProfileScreen()),
       );
     }
   }

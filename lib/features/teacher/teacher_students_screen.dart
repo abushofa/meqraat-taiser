@@ -1,10 +1,12 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:quran_app/features/call/agora_call_screen.dart';
 import '../../core/network/api_client.dart';
 import '../../core/utils/app_labels.dart';
 import '../../core/widgets/app_dialogs.dart';
 import '../../core/ui/app_snackbar.dart';
-import 'jitsi_room_screen.dart';
 
 class TeacherStudentsScreen extends StatefulWidget {
   const TeacherStudentsScreen({super.key});
@@ -86,46 +88,61 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen> {
     try {
       final dio = await ApiClient.getInstance();
 
+      final studentId = int.tryParse(student['student_id']?.toString() ?? '');
+      if (studentId == null) {
+        AppSnackBar.error(context, 'student_id غير صالح');
+        return;
+      }
+
       final response = await dio.post(
         '/teacher/start_session.php',
-        data: {'student_id': int.parse(student['student_id'].toString())},
+        data: {'student_id': studentId, 'recording_enabled': 0},
       );
 
       final body = response.data;
 
       if (body is Map && body['ok'] == true) {
         final session = body['data']?['session'];
-        final meetingUrl = session?['meeting_url']?.toString();
+        final agora = session?['agora'];
 
-        if (meetingUrl != null &&
-            meetingUrl.isNotEmpty &&
-            session != null &&
-            mounted) {
-          await AppDialogs.showJitsiWarning(context);
-
-          if (!mounted) return;
+        if (session != null && agora is Map) {
+          final sessionId = int.tryParse(session['id']?.toString() ?? '') ?? 0;
 
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => JitsiRoomScreen(
-                roomUrl: meetingUrl,
+              builder: (_) => AgoraCallScreen(
+                appId: agora['app_id']?.toString() ?? '',
+                token: agora['teacher_token']?.toString() ?? '',
+                channelName: agora['channel']?.toString() ?? '',
+                uid: int.tryParse(agora['teacher_uid']?.toString() ?? '') ?? 0,
                 title: 'جلسة ${student['name'] ?? ''}',
-                sessionId: int.parse(session['id'].toString()),
+                displayName: student['name']?.toString() ?? '',
+                isTeacher: true,
+                onEndSession: () async {
+                  try {
+                    final dio = await ApiClient.getInstance();
+                    await dio.post(
+                      '/teacher/end_session.php',
+                      data: {'session_id': sessionId},
+                    );
+                  } catch (_) {}
+                },
               ),
             ),
           );
+          return;
         }
-      } else {
-        if (!mounted) return;
-        AppSnackBar.error(
-          context,
-          (body is Map ? body['message'] : null)?.toString() ??
-              'تعذر بدء الجلسة',
-        );
+
+        AppSnackBar.error(context, 'بيانات Agora غير مكتملة');
+        return;
       }
+
+      AppSnackBar.error(
+        context,
+        (body is Map ? body['message'] : null)?.toString() ?? 'فشل بدء الجلسة',
+      );
     } on DioException catch (e) {
-      if (!mounted) return;
       AppSnackBar.error(
         context,
         e.response?.data is Map
@@ -133,8 +150,7 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen> {
             : 'فشل الاتصال بالخادم',
       );
     } catch (_) {
-      if (!mounted) return;
-      AppSnackBar.error(context, 'حدث خطأ غير متوقع');
+      AppSnackBar.error(context, 'خطأ غير متوقع');
     }
   }
 
@@ -220,8 +236,9 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen> {
     final name = '${student['name'] ?? '—'}';
     final email = '${student['email'] ?? '—'}';
     final readingType = AppLabels.qiraa(student['reading_type']?.toString());
-    final preferredPeriod =
-        AppLabels.period(student['preferred_period']?.toString());
+    final preferredPeriod = AppLabels.period(
+      student['preferred_period']?.toString(),
+    );
     final room = '${student['room'] ?? '—'}';
     final lastAttendanceStatus =
         student['last_attendance_status']?.toString() ?? '';
@@ -258,7 +275,11 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen> {
               runSpacing: 8,
               children: [
                 ElevatedButton.icon(
-                  onPressed: () => _startIndividualSession(student),
+                  onPressed: () async {
+                    try {
+                      await _startIndividualSession(student);
+                    } catch (_) {}
+                  },
                   icon: const Icon(Icons.mic),
                   label: const Text('بدء جلسة'),
                 ),
@@ -342,10 +363,7 @@ class _AddNoteDialog extends StatefulWidget {
   final int studentId;
   final String studentName;
 
-  const _AddNoteDialog({
-    required this.studentId,
-    required this.studentName,
-  });
+  const _AddNoteDialog({required this.studentId, required this.studentName});
 
   @override
   State<_AddNoteDialog> createState() => _AddNoteDialogState();
@@ -383,9 +401,9 @@ class _AddNoteDialogState extends State<_AddNoteDialog> {
 
       if (body is Map && body['ok'] == true) {
         if (!mounted) return;
-        Navigator.of(context).pop(
-          body['message']?.toString() ?? 'تم حفظ الملاحظة بنجاح',
-        );
+        Navigator.of(
+          context,
+        ).pop(body['message']?.toString() ?? 'تم حفظ الملاحظة بنجاح');
         return;
       }
 
@@ -439,10 +457,7 @@ class _AddNoteDialogState extends State<_AddNoteDialog> {
             ),
             if (_error != null) ...[
               const SizedBox(height: 12),
-              Text(
-                _error!,
-                style: const TextStyle(color: Colors.red),
-              ),
+              Text(_error!, style: const TextStyle(color: Colors.red)),
             ],
           ],
         ),

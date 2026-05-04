@@ -9,6 +9,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../config/app_config.dart';
 import '../network/api_client.dart';
 import 'notification_navigation_service.dart';
+import '../../core/storage/session_storage.dart';
 
 class PushNotificationService {
   static final FirebaseMessaging _messaging = FirebaseMessaging.instance;
@@ -37,11 +38,13 @@ class PushNotificationService {
           AppConfig.enablePushOnIOS) {
         // سنفعلها لاحقًا عندما يكون حساب Apple جاهز
       } else {
-        debugPrint('Push notifications are disabled temporarily on iOS/macOS.');
+        if (kDebugMode) {
+        debugPrint('Push notifications are disabled temporarily on iOS/macOS.');}
       }
       _initialized = true;
     } catch (e) {
-      debugPrint('Push init error: $e');
+      if (kDebugMode) {
+      debugPrint('Push init error: $e');}
     }
   }
 
@@ -69,23 +72,25 @@ class PushNotificationService {
   }
 
   static Future<void> _initFirebaseMessagingForAndroid() async {
+    final isLoggedIn = await SessionStorage.isLoggedIn();
+
+    if (!isLoggedIn) return; // 🔥 حماية مهمة جدًا
+
     final token = await _messaging.getToken();
-    debugPrint('FCM TOKEN: $token');
 
     if (token != null && token.isNotEmpty) {
       await _registerTokenToServer(token);
     }
 
     _messaging.onTokenRefresh.listen((token) async {
-      debugPrint('FCM TOKEN REFRESH: $token');
+      final isLoggedIn = await SessionStorage.isLoggedIn();
+
+      if (!isLoggedIn) return; // 🔥 منع إعادة التسجيل
+
       await _registerTokenToServer(token);
     });
 
     FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
-      debugPrint('Foreground title: ${message.notification?.title}');
-      debugPrint('Foreground body: ${message.notification?.body}');
-      debugPrint('Foreground data: ${message.data}');
-
       await _showLocalNotification(
         title: message.notification?.title ?? 'إشعار جديد',
         body: message.notification?.body ?? '',
@@ -142,61 +147,48 @@ class PushNotificationService {
     }
   }
 
-  static void _handleNotificationData(Map<String, dynamic> data) {
-    final type = data['type']?.toString();
-    final targetRole = data['target_role']?.toString();
+static Future<void> _handleNotificationData(Map<String, dynamic> data) async {
+  // 🔴 تحقق من أن المستخدم ما زال مسجل دخول
+  final isLoggedIn = await SessionStorage.isLoggedIn();
+  if (!isLoggedIn) return;
 
-    if (targetRole != 'student') return;
+  final type = data['type']?.toString();
+  final targetRole = data['target_role']?.toString();
 
-    final navigator = NotificationNavigationService.navigatorKey.currentState;
-    if (navigator == null) return;
+  if (targetRole != 'student') return;
 
-    /*if (type == 'message') {
-      final messageTitle = data['message_title']?.toString() ?? '';
-      final messageBody = data['message_body']?.toString() ?? '';
+  final navigator = NotificationNavigationService.navigatorKey.currentState;
+  if (navigator == null) return;
 
-      navigator.pushNamedAndRemoveUntil(
+  if (type == 'message') {
+    final messageTitle = data['message_title']?.toString() ?? '';
+    final messageBody = data['message_body']?.toString() ?? '';
+
+    navigator.pushNamedAndRemoveUntil('/student/messages', (route) => false);
+
+    Future.delayed(const Duration(milliseconds: 300), () {
+      NotificationNavigationService.navigatorKey.currentState?.pushNamed(
         '/student/notification-message',
-        (route) => false,
-        arguments: {'titleText': messageTitle, 'bodyText': messageBody},
+        arguments: {
+          'titleText': messageTitle,
+          'bodyText': messageBody,
+        },
       );
-      return;
-    }*/
+    });
 
-    if (type == 'message') {
-      final messageTitle = data['message_title']?.toString() ?? '';
-      final messageBody = data['message_body']?.toString() ?? '';
-
-      navigator.pushNamedAndRemoveUntil('/student/messages', (route) => false);
-
-      Future.delayed(const Duration(milliseconds: 300), () {
-        NotificationNavigationService.navigatorKey.currentState?.pushNamed(
-          '/student/notification-message',
-          arguments: {'titleText': messageTitle, 'bodyText': messageBody},
-        );
-      });
-
-      return;
-    }
-
-    if (type == 'session') {
-      final meetingUrl = data['meeting_url']?.toString() ?? '';
-
-      if (meetingUrl.isNotEmpty) {
-        navigator.pushNamedAndRemoveUntil(
-          '/student/jitsi',
-          (route) => false,
-          arguments: {'roomUrl': meetingUrl, 'title': 'جلسة القراءة'},
-        );
-      } else {
-        NotificationNavigationService.openStudentSessions();
-        navigator.pushNamedAndRemoveUntil(
-          '/student/sessions',
-          (route) => false,
-        );
-      }
-    }
+    return;
   }
+
+  if (type == 'session') {
+    // 🔴 تم إلغاء Jitsi بالكامل — نستخدم Agora فقط
+    NotificationNavigationService.openStudentSessions();
+
+    navigator.pushNamedAndRemoveUntil(
+      '/student/sessions',
+      (route) => false,
+    );
+  }
+}
 
   static Future<void> _requestPermission() async {
     await _messaging.requestPermission(
@@ -209,16 +201,18 @@ class PushNotificationService {
 
   static Future<void> _registerTokenToServer(String token) async {
     try {
+      final isLoggedIn = await SessionStorage.isLoggedIn();
+
+      if (!isLoggedIn) return;
+
       final dio = await ApiClient.getInstance();
 
-      final response = await dio.post(
+      await dio.post(
         '/device/register_token.php',
         data: {'token': token, 'platform': Platform.isIOS ? 'ios' : 'android'},
       );
-
-      debugPrint('REGISTER TOKEN RESPONSE: ${response.data}');
-    } catch (e) {
-      debugPrint('Register token error: $e');
+    } catch (_) {
+      // لا نكسر التطبيق
     }
   }
 }

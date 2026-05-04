@@ -9,7 +9,6 @@ import 'core/notifications/push_notification_service.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/login_screen.dart';
 import 'features/splash/splash_screen.dart';
-import 'features/teacher/jitsi_room_screen.dart';
 import 'features/student/student_home_shell.dart';
 import 'features/student/student_message_details_screen.dart';
 import 'features/student/student_notification_message_screen.dart';
@@ -66,18 +65,6 @@ class QuranApp extends StatelessWidget {
       },
       home: const SplashScreen(),
       onGenerateRoute: (settings) {
-        if (settings.name == '/student/jitsi') {
-          final args = settings.arguments as Map<String, dynamic>;
-          return MaterialPageRoute(
-            builder: (context) => JitsiRoomScreen(
-              roomUrl: args['roomUrl'] as String,
-              title: args['title'] as String? ?? 'جلسة القراءة',
-              displayName: args['displayName']?.toString(),
-              email: args['email']?.toString(),
-              isTeacher: false,
-            ),
-          );
-        }
         if (settings.name == '/student/message-details') {
           final args = settings.arguments as Map<String, dynamic>;
           return MaterialPageRoute(

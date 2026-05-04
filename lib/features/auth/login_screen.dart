@@ -7,6 +7,7 @@ import '../teacher/teacher_home_shell.dart';
 import '../admin/admin_home_shell.dart';
 import 'student_register_screen.dart';
 import 'teacher_register_screen.dart';
+import '../../core/storage/session_storage.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -114,6 +115,7 @@ class _LoginScreenState extends State<LoginScreen>
       if (data is Map && data['ok'] == true) {
         final user = data['data']?['user'];
         final role = user?['role'];
+        await SessionStorage.setLoggedIn(true);
 
         if (!mounted) return;
 

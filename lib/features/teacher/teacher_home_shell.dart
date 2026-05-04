@@ -1,4 +1,6 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:quran_app/core/storage/session_storage.dart';
 
 import '../../core/network/api_client.dart';
 import '../auth/login_screen.dart';
@@ -8,6 +10,7 @@ import 'teacher_students_screen.dart';
 import 'teacher_sessions_screen.dart';
 import 'teacher_messages_screen.dart';
 import '../profile/profile_screen.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class TeacherHomeShell extends StatefulWidget {
   const TeacherHomeShell({super.key});
@@ -40,15 +43,27 @@ class _TeacherHomeShellState extends State<TeacherHomeShell> {
   Future<void> _logout() async {
     try {
       final dio = await ApiClient.getInstance();
-      await dio.post('/logout.php');
-    } catch (_) {}
+
+      await dio.post(
+        '/logout.php',
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+
+      // حذف التوكن من الجهاز
+      try {
+        await FirebaseMessaging.instance.deleteToken();
+      } catch (_) {}
+    } catch (_) {
+      // لا نكسر تجربة المستخدم
+    }
+
+    // تنظيف الجلسة محليًا
+    await SessionStorage.clear();
 
     if (!mounted) return;
 
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(
-        builder: (_) => const LoginScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
       (route) => false,
     );
   }
@@ -59,9 +74,7 @@ class _TeacherHomeShellState extends State<TeacherHomeShell> {
     } else if (value == 'profile') {
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (_) => const ProfileScreen(),
-        ),
+        MaterialPageRoute(builder: (_) => const ProfileScreen()),
       );
     }
   }
@@ -82,10 +95,7 @@ class _TeacherHomeShellState extends State<TeacherHomeShell> {
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 2),
-            const Text(
-              'منصة تعليم القرآن',
-              style: TextStyle(fontSize: 11),
-            ),
+            const Text('منصة تعليم القرآن', style: TextStyle(fontSize: 11)),
           ],
         ),
         actions: [
