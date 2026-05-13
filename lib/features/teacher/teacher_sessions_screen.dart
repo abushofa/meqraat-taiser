@@ -4,12 +4,14 @@ import 'package:quran_app/features/call/agora_call_screen.dart';
 import '../../core/network/api_client.dart';
 import '../../core/ui/app_snackbar.dart';
 import '../../core/utils/app_labels.dart';
+import '../../core/utils/time_helper.dart';
 
 class TeacherSessionsScreen extends StatefulWidget {
   const TeacherSessionsScreen({super.key});
 
   @override
-  State<TeacherSessionsScreen> createState() => _TeacherSessionsScreenState();
+  State<TeacherSessionsScreen> createState() =>
+      _TeacherSessionsScreenState();
 }
 
 class _TeacherSessionsScreenState extends State<TeacherSessionsScreen> {
@@ -92,6 +94,30 @@ class _TeacherSessionsScreenState extends State<TeacherSessionsScreen> {
     return Colors.grey;
   }
 
+  // =============================
+  // 🔥 API نظيف لإنهاء الجلسة
+  // =============================
+  Future<bool> _callEndSessionApi(int sessionId) async {
+    try {
+      final dio = await ApiClient.getInstance();
+
+      final response = await dio.post(
+        '/teacher/end_session.php',
+        data: {'session_id': sessionId},
+      );
+
+      final body = response.data;
+
+      if (body is Map && body['ok'] == true) {
+        return true;
+      }
+
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _continueSession(Map session) async {
     final channel = session['agora_channel']?.toString() ?? '';
     final token = session['teacher_token']?.toString() ?? '';
@@ -105,6 +131,8 @@ class _TeacherSessionsScreenState extends State<TeacherSessionsScreen> {
       AppSnackBar.error(context, 'بيانات الجلسة غير مكتملة');
       return;
     }
+
+    final sessionId = int.tryParse(session['id'].toString());
 
     if (!mounted) return;
 
@@ -121,40 +149,42 @@ class _TeacherSessionsScreenState extends State<TeacherSessionsScreen> {
               : 'جلسة ${session['student_name'] ?? ''}',
           displayName: session['student_name']?.toString() ?? 'الطالب',
           isTeacher: true,
-          sessionId: int.tryParse(session['id'].toString()),
+          sessionId: sessionId,
+
+          // 🔥 أهم إصلاح هنا
+          onEndSession: () async {
+            if (sessionId == null) return;
+
+            final ok = await _callEndSessionApi(sessionId);
+
+            if (!ok && mounted) {
+              AppSnackBar.error(context, 'فشل إنهاء الجلسة');
+            }
+          },
         ),
       ),
     );
   }
 
+  // =============================
+  // 🔥 زر إنهاء من القائمة
+  // =============================
   Future<void> _endSession(Map session) async {
-    try {
-      final dio = await ApiClient.getInstance();
+    final sessionId = int.tryParse(session['id'].toString());
 
-      final response = await dio.post(
-        '/teacher/end_session.php',
-        data: {'session_id': int.parse(session['id'].toString())},
-      );
+    if (sessionId == null) {
+      AppSnackBar.error(context, 'session_id غير صالح');
+      return;
+    }
 
-      final body = response.data;
+    final ok = await _callEndSessionApi(sessionId);
 
-      if (body is Map && body['ok'] == true) {
-        if (!mounted) return;
+    if (!mounted) return;
 
-        AppSnackBar.success(context, 'تم إنهاء الجلسة');
-
-        _loadSessions();
-      } else {
-        if (!mounted) return;
-
-        AppSnackBar.error(
-          context,
-          body is Map ? body['message']?.toString() ?? 'حدث خطأ' : 'حدث خطأ',
-        );
-      }
-    } catch (_) {
-      if (!mounted) return;
-
+    if (ok) {
+      AppSnackBar.success(context, 'تم إنهاء الجلسة');
+      _loadSessions();
+    } else {
       AppSnackBar.error(context, 'فشل إنهاء الجلسة');
     }
   }
@@ -163,8 +193,8 @@ class _TeacherSessionsScreenState extends State<TeacherSessionsScreen> {
     final status = '${session['status'] ?? ''}';
     final type = '${session['session_type'] ?? ''}';
     final studentName = '${session['student_name'] ?? '—'}';
-    final startsAt = '${session['starts_at'] ?? '—'}';
-    final endsAt = '${session['ends_at'] ?? '—'}';
+    final startsAt = TimeHelper.formatTime(session['starts_at']);
+    final endsAt = TimeHelper.formatTime(session['ends_at']);
     final duration = '${session['duration_minutes'] ?? '—'}';
     final room = '${session['room'] ?? '—'}';
 

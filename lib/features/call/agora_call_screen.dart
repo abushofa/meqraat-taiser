@@ -1,8 +1,34 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:flutter/material.dart';
-
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../core/network/api_client.dart';
+import 'package:audio_session/audio_session.dart';
+
+@pragma('vm:entry-point')
+void startCallback() {
+  FlutterForegroundTask.setTaskHandler(SessionTaskHandler());
+}
+
+class SessionTaskHandler extends TaskHandler {
+  @override
+  Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
+    debugPrint('Foreground task started');
+  }
+
+  @override
+  void onRepeatEvent(DateTime timestamp) {
+    debugPrint('Session alive: ${timestamp.toIso8601String()}');
+  }
+
+  @override
+  Future<void> onDestroy(DateTime timestamp, bool isTimeout) async {
+    debugPrint('Foreground task destroyed');
+  }
+}
 
 class AgoraCallScreen extends StatefulWidget {
   final String appId;
@@ -10,7 +36,7 @@ class AgoraCallScreen extends StatefulWidget {
   final String channelName;
   final int uid;
   final String title;
-  final String displayName; // اسم الطرف الآخر
+  final String displayName;
   final bool isTeacher;
   final Future<void> Function()? onEndSession;
   final int? sessionId;
@@ -33,7 +59,7 @@ class AgoraCallScreen extends StatefulWidget {
 }
 
 class _AgoraCallScreenState extends State<AgoraCallScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   late final RtcEngine _engine;
   late final AnimationController _pulseController;
   late final Animation<double> _pulseScale;
@@ -46,6 +72,9 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
   bool _localVideoEnabled = false;
   bool _speakerEnabled = true;
   bool _ending = false;
+
+  bool _isRecording = false;
+  String? _lastRecordingPath;
 
   int? _remoteUid;
   bool _remoteVideoEnabled = false;
@@ -61,69 +90,88 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
 
   Timer? _remoteSpeakingResetTimer;
   Timer? _localSpeakingResetTimer;
-   Timer? _pingTimer;
+  Timer? _pingTimer;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
+    if (widget.isTeacher) _initForegroundService();
 
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
 
-    _pulseScale = Tween<double>(
-      begin: 1.0,
-      end: 1.18,
-    ).animate(CurvedAnimation(parent: _pulseController, curve: Curves.easeOut));
+    _pulseScale = Tween<double>(begin: 1.0, end: 1.18).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeOut),
+    );
 
-    _pulseOpacity = Tween<double>(
-      begin: 0.55,
-      end: 0.0,
-    ).animate(CurvedAnimation(parent: _pulseController, curve: Curves.easeOut));
+    _pulseOpacity = Tween<double>(begin: 0.55, end: 0.0).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeOut),
+    );
 
     _initAgora();
     _startPing();
   }
 
-  String _sanitizeAppId(String value) {
-    return value.trim();
+  Future<void> _initForegroundService() async {
+    try {
+      FlutterForegroundTask.init(
+        androidNotificationOptions: AndroidNotificationOptions(
+          channelId: 'quran_session_channel',
+          channelName: 'جلسة القرآن',
+          channelDescription: 'تشغيل جلسة القرآن في الخلفية',
+          channelImportance: NotificationChannelImportance.HIGH,
+          priority: NotificationPriority.HIGH,
+        ),
+        iosNotificationOptions: const IOSNotificationOptions(
+          showNotification: false,
+          playSound: false,
+        ),
+        foregroundTaskOptions: ForegroundTaskOptions(
+          eventAction: ForegroundTaskEventAction.repeat(5000),
+          autoRunOnBoot: false,
+          allowWakeLock: true,
+          allowWifiLock: true,
+        ),
+      );
+
+      await FlutterForegroundTask.requestNotificationPermission();
+      await FlutterForegroundTask.requestIgnoreBatteryOptimization();
+
+      await FlutterForegroundTask.startService(
+        notificationTitle: 'جلسة قرآن نشطة',
+        notificationText: 'الجلسة تعمل في الخلفية',
+        callback: startCallback,
+      );
+    } catch (e) {
+      debugPrint("Foreground Service Error: $e");
+    }
   }
 
-  String _sanitizeChannel(String value) {
-    return value.trim();
-  }
-
-  String _sanitizeToken(String value) {
-    return value.trim();
-  }
+  String _sanitizeAppId(String v) => v.trim();
+  String _sanitizeChannel(String v) => v.trim();
+  String _sanitizeToken(String v) => v.trim();
 
   void _startPing() {
-  if (!widget.isTeacher) return;
-
-  _pingTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
-    try {
-      // لازم تمرر session_id في arguments
-      /*final sessionId = (ModalRoute.of(context)?.settings.arguments
-          as Map?)?['session_id'];*/
-      final sessionId = widget.sessionId;
-
-      if (sessionId == null) return;
-
-      final dio = await ApiClient.getInstance();
-      await dio.post(
-        '/teacher/ping_session.php',
-        data: {'session_id': sessionId},
-      );
-    } catch (_) {}
-  });
-}
+    if (!widget.isTeacher) return;
+    _pingTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
+      try {
+        final sessionId = widget.sessionId;
+        if (sessionId == null) return;
+        final dio = await ApiClient.getInstance();
+        await dio.post('/teacher/ping_session.php', data: {'session_id': sessionId});
+      } catch (_) {}
+    });
+  }
 
   String _formatDuration(int seconds) {
-    final hours = (seconds ~/ 3600).toString().padLeft(2, '0');
-    final minutes = ((seconds % 3600) ~/ 60).toString().padLeft(2, '0');
-    final remainSeconds = (seconds % 60).toString().padLeft(2, '0');
-    return '$hours:$minutes:$remainSeconds';
+    final h = (seconds ~/ 3600).toString().padLeft(2, '0');
+    final m = ((seconds % 3600) ~/ 60).toString().padLeft(2, '0');
+    final s = (seconds % 60).toString().padLeft(2, '0');
+    return '$h:$m:$s';
   }
 
   void _startSessionTimer() {
@@ -131,18 +179,13 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
     _sessionSeconds = 0;
     _sessionTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
-      setState(() {
-        _sessionSeconds++;
-      });
+      setState(() => _sessionSeconds++);
     });
   }
 
   void _updatePulseAnimation() {
-    final shouldPulse = _isRemoteSpeaking;
-    if (shouldPulse) {
-      if (!_pulseController.isAnimating) {
-        _pulseController.repeat();
-      }
+    if (_isRemoteSpeaking) {
+      if (!_pulseController.isAnimating) _pulseController.repeat();
     } else {
       if (_pulseController.isAnimating) {
         _pulseController.stop();
@@ -152,28 +195,19 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
   }
 
   void _setRemoteSpeaking(bool value) {
-    if (!mounted) return;
-    if (_isRemoteSpeaking == value) return;
-
-    setState(() {
-      _isRemoteSpeaking = value;
-    });
+    if (!mounted || _isRemoteSpeaking == value) return;
+    setState(() => _isRemoteSpeaking = value);
     _updatePulseAnimation();
   }
 
   void _setLocalSpeaking(bool value) {
-    if (!mounted) return;
-    if (_isLocalSpeaking == value) return;
-
-    setState(() {
-      _isLocalSpeaking = value;
-    });
+    if (!mounted || _isLocalSpeaking == value) return;
+    setState(() => _isLocalSpeaking = value);
   }
 
   void _markRemoteSpeaking() {
     _remoteSpeakingResetTimer?.cancel();
     _setRemoteSpeaking(true);
-
     _remoteSpeakingResetTimer = Timer(const Duration(milliseconds: 900), () {
       if (!mounted) return;
       _setRemoteSpeaking(false);
@@ -183,29 +217,30 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
   void _markLocalSpeaking() {
     _localSpeakingResetTimer?.cancel();
     _setLocalSpeaking(true);
-
     _localSpeakingResetTimer = Timer(const Duration(milliseconds: 700), () {
       if (!mounted) return;
-      if (!_localAudioMuted) {
-        _setLocalSpeaking(false);
-      }
+      if (!_localAudioMuted) _setLocalSpeaking(false);
     });
   }
 
   bool _isIgnorableAgoraError(ErrorCodeType err, String msg) {
     final combined = '${err.name} $msg'.toLowerCase();
-
     if (combined.contains('-3')) return true;
     if (combined.contains('interrupted')) return true;
     if (combined.contains('timeout')) return true;
-    if (combined.contains('lookup channel timeout')) return true;
-
     switch (err) {
       case ErrorCodeType.errOk:
       case ErrorCodeType.errAborted:
         return true;
       default:
         return false;
+    }
+  }
+
+  Future<void> _setSpeakerOn() async {
+    await _engine.setEnableSpeakerphone(true);
+    if (Platform.isIOS) {
+      await _engine.setDefaultAudioRouteToSpeakerphone(true);
     }
   }
 
@@ -216,24 +251,37 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
     final uid = widget.uid;
 
     try {
-      if (appId.isEmpty) {
-        throw Exception('معرّف Agora غير موجود');
-      }
-      if (appId.length != 32) {
-        throw Exception('معرّف Agora غير صحيح');
-      }
-      if (channelName.isEmpty) {
-        throw Exception('اسم القناة غير موجود');
-      }
-      if (token.isEmpty) {
-        throw Exception('رمز الدخول غير موجود');
-      }
-      if (uid <= 0) {
-        throw Exception('معرّف المستخدم غير صحيح');
-      }
+      if (appId.isEmpty) throw Exception('معرّف Agora غير موجود');
+      if (appId.length != 32) throw Exception('معرّف Agora غير صحيح');
+      if (channelName.isEmpty) throw Exception('اسم القناة غير موجود');
+      if (token.isEmpty) throw Exception('رمز الدخول غير موجود');
+      if (uid <= 0) throw Exception('معرّف المستخدم غير صحيح');
 
       _engine = createAgoraRtcEngine();
       _engineCreated = true;
+
+      final session = await AudioSession.instance;
+      await session.configure(AudioSessionConfiguration(
+        avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
+        avAudioSessionCategoryOptions: Platform.isIOS
+            ? AVAudioSessionCategoryOptions.allowBluetooth |
+              AVAudioSessionCategoryOptions.allowBluetoothA2dp |
+              AVAudioSessionCategoryOptions.defaultToSpeaker
+            : AVAudioSessionCategoryOptions.allowBluetooth,
+        // Use defaultMode instead of voiceChat: voiceChat routes to earpiece by default
+        // and conflicts with Agora's own audio session management on iOS.
+        avAudioSessionMode: AVAudioSessionMode.defaultMode,
+        avAudioSessionRouteSharingPolicy: AVAudioSessionRouteSharingPolicy.defaultPolicy,
+        androidAudioAttributes: const AndroidAudioAttributes(
+          contentType: AndroidAudioContentType.music,
+          flags: AndroidAudioFlags.none,
+          usage: AndroidAudioUsage.media,
+        ),
+        androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+        androidWillPauseWhenDucked: false,
+      ));
+      await session.setActive(true);
+      await Future.delayed(const Duration(milliseconds: 500));
 
       await _engine.initialize(
         RtcEngineContext(
@@ -242,33 +290,49 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
         ),
       );
 
+      if (Platform.isIOS) {
+        await _engine.setDefaultAudioRouteToSpeakerphone(true);
+      }
+
       _engine.registerEventHandler(
         RtcEngineEventHandler(
           onJoinChannelSuccess: (connection, elapsed) async {
             if (!mounted) return;
-
-            await _engine.setEnableSpeakerphone(true);
-
+            await _setSpeakerOn();
+            if (Platform.isIOS) {
+              await Future.delayed(const Duration(milliseconds: 500));
+              await _setSpeakerOn();
+            }
             setState(() {
-              _joined = true; // 🔥 هذا هو الحل الرئيسي
+              _joined = true;
               _errorText = null;
               _connectionStatus = 'متصل، بانتظار الطرف الآخر...';
             });
-
             _startSessionTimer();
           },
           onUserJoined: (connection, remoteUid, elapsed) async {
             if (!mounted) return;
-
-            await _engine.setEnableSpeakerphone(true); // 👈 تأكيد إضافي
-
+            await _setSpeakerOn();
+            if (Platform.isIOS) {
+              await Future.delayed(const Duration(milliseconds: 500));
+              await _setSpeakerOn();
+              // Re-activate the audio session after Agora starts receiving the remote stream,
+              // because Agora's internal audio setup can reset the speaker routing on iOS.
+              Future.delayed(const Duration(milliseconds: 1500), () async {
+                if (!mounted || !_engineReady) return;
+                try {
+                  final audioSession = await AudioSession.instance;
+                  await audioSession.setActive(true);
+                } catch (_) {}
+                await _setSpeakerOn();
+              });
+            }
             setState(() {
               _remoteUid = remoteUid;
               _connectionStatus = 'الجلسة متصلة';
             });
           },
           onUserOffline: (connection, remoteUid, reason) {
-            debugPrint('AGORA REMOTE OFFLINE: $remoteUid');
             if (!mounted) return;
             setState(() {
               if (_remoteUid == remoteUid) {
@@ -281,34 +345,26 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
             _remoteSpeakingResetTimer?.cancel();
             _updatePulseAnimation();
           },
-          onRemoteVideoStateChanged:
-              (connection, remoteUid, state, reason, elapsed) {
-                if (!mounted) return;
-                setState(() {
-                  if (_remoteUid == remoteUid) {
-                    _remoteVideoEnabled =
-                        state == RemoteVideoState.remoteVideoStateStarting ||
-                        state == RemoteVideoState.remoteVideoStateDecoding ||
-                        state == RemoteVideoState.remoteVideoStateFrozen;
-                  }
-                });
-              },
-          onConnectionStateChanged: (connection, state, reason) {
-            debugPrint('AGORA STATE: $state / REASON: $reason');
+          onRemoteVideoStateChanged: (connection, remoteUid, state, reason, elapsed) {
             if (!mounted) return;
-
+            setState(() {
+              if (_remoteUid == remoteUid) {
+                _remoteVideoEnabled =
+                    state == RemoteVideoState.remoteVideoStateStarting ||
+                    state == RemoteVideoState.remoteVideoStateDecoding ||
+                    state == RemoteVideoState.remoteVideoStateFrozen;
+              }
+            });
+          },
+          onConnectionStateChanged: (connection, state, reason) {
+            if (!mounted) return;
             if (state == ConnectionStateType.connectionStateConnecting) {
               setState(() {
                 _connectionStatus = 'جارٍ الاتصال...';
-                if (!_joined) {
-                  _errorText = null;
-                }
+                if (!_joined) _errorText = null;
               });
-            } else if (state ==
-                ConnectionStateType.connectionStateReconnecting) {
-              setState(() {
-                _connectionStatus = 'جارٍ إعادة الاتصال...';
-              });
+            } else if (state == ConnectionStateType.connectionStateReconnecting) {
+              setState(() => _connectionStatus = 'جارٍ إعادة الاتصال...');
             } else if (state == ConnectionStateType.connectionStateConnected) {
               setState(() {
                 _errorText = null;
@@ -316,74 +372,42 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
                     ? 'متصل، بانتظار الطرف الآخر...'
                     : 'الجلسة متصلة';
               });
-            } else if (state ==
-                ConnectionStateType.connectionStateDisconnected) {
-              setState(() {
-                _connectionStatus = 'انقطع الاتصال';
-              });
+            } else if (state == ConnectionStateType.connectionStateDisconnected) {
+              setState(() => _connectionStatus = 'انقطع الاتصال');
             } else if (state == ConnectionStateType.connectionStateFailed) {
-              if (!_joined) {
-                setState(() {
-                  _errorText = 'فشل الاتصال';
-                });
-              }
+              if (!_joined) setState(() => _errorText = 'فشل الاتصال');
             }
           },
-
           onActiveSpeaker: (connection, speakerUid) {
             if (!mounted) return;
-            if (speakerUid != 0) {
-              _markRemoteSpeaking();
-            }
+            if (speakerUid != 0) _markRemoteSpeaking();
           },
-
-          onAudioVolumeIndication:
-              (connection, speakers, speakerNumber, totalVolume) {
-                if (!mounted) return;
-
-                bool localDetected = false;
-                bool remoteDetected = false;
-
-                for (final speaker in speakers) {
-                  final volume = speaker.volume ?? 0;
-                  final speakerUid = speaker.uid ?? 0;
-
-                  if (volume > 6) {
-                    if (speakerUid == 0) {
-                      localDetected = true;
-                    } else if (_remoteUid != null && speakerUid == _remoteUid) {
-                      remoteDetected = true;
-                    } else if (_remoteUid == null && speakerUid != 0) {
-                      remoteDetected = true;
-                    }
-                  }
+          onAudioVolumeIndication: (connection, speakers, speakerNumber, totalVolume) {
+            if (!mounted) return;
+            bool localDetected = false;
+            bool remoteDetected = false;
+            for (final speaker in speakers) {
+              final volume = speaker.volume ?? 0;
+              final speakerUid = speaker.uid ?? 0;
+              if (volume > 6) {
+                if (speakerUid == 0) {
+                  localDetected = true;
+                } else if (_remoteUid != null && speakerUid == _remoteUid) {
+                  remoteDetected = true;
+                } else if (_remoteUid == null && speakerUid != 0) {
+                  remoteDetected = true;
                 }
-
-                if (localDetected && !_localAudioMuted) {
-                  _markLocalSpeaking();
-                }
-
-                if (remoteDetected) {
-                  _markRemoteSpeaking();
-                }
-              },
-
+              }
+            }
+            if (localDetected && !_localAudioMuted) _markLocalSpeaking();
+            if (remoteDetected) _markRemoteSpeaking();
+          },
           onError: (err, msg) {
             debugPrint('AGORA ERROR: $err - $msg');
-
-            if (_isIgnorableAgoraError(err, msg)) {
-              return;
-            }
-
+            if (_isIgnorableAgoraError(err, msg)) return;
             if (!mounted) return;
-
-            if (_joined) {
-              return;
-            }
-
-            setState(() {
-              _errorText = 'حدث خطأ في الاتصال';
-            });
+            if (_joined) return;
+            setState(() => _errorText = 'حدث خطأ في الاتصال');
           },
         ),
       );
@@ -391,8 +415,8 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
       await Future.delayed(const Duration(milliseconds: 300));
 
       await _engine.setAudioProfile(
-        profile: AudioProfileType.audioProfileSpeechStandard,
-        scenario: AudioScenarioType.audioScenarioChatroom,
+        profile: AudioProfileType.audioProfileMusicHighQuality,
+        scenario: AudioScenarioType.audioScenarioGameStreaming,
       );
 
       await _engine.enableAudio();
@@ -408,7 +432,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
         _engineReady = true;
         _connectionStatus = 'جارٍ الاتصال...';
       });
-      debugPrint('AGORA JOIN PARAMS => channel: $channelName | uid: $uid | token length: ${token.length}');
+
       await _engine.joinChannel(
         token: token,
         channelId: channelName,
@@ -421,133 +445,195 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
           clientRoleType: ClientRoleType.clientRoleBroadcaster,
         ),
       );
-      await Future.delayed(const Duration(milliseconds: 300));
-      await _engine.setEnableSpeakerphone(true);
-      //await _engine.setEnableSpeakerphone(true);
-    } catch (e) {
-      final errorString = e.toString();
-      debugPrint('AGORA INIT EXCEPTION: $errorString');
 
-      if (errorString.contains('AgoraRtcException(-3') ||
-          errorString.contains('AgoraRtcException(-3, null)')) {
-        return;
+      await Future.delayed(const Duration(milliseconds: 300));
+      await _setSpeakerOn();
+      if (Platform.isIOS) {
+        // Re-activate after joinChannel because Agora may reconfigure the session internally.
+        await Future.delayed(const Duration(milliseconds: 800));
+        final audioSession = await AudioSession.instance;
+        await audioSession.setActive(true);
+        await _setSpeakerOn();
+      }
+    } catch (e) {
+      final err = e.toString();
+      debugPrint('AGORA INIT EXCEPTION: $err');
+      if (err.contains('AgoraRtcException(-3')) return;
+      if (!mounted) return;
+      setState(() => _errorText = 'تعذر بدء الاتصال');
+    }
+  }
+
+  Future<String> _getRecordingPath() async {
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+
+    if (Platform.isAndroid) {
+      final fileName = 'session_$timestamp.wav';
+      try {
+        await Permission.storage.request();
+        final dir = Directory('/storage/emulated/0/Download/مقرأة التيسير');
+        if (!await dir.exists()) await dir.create(recursive: true);
+        return '${dir.path}/$fileName';
+      } catch (_) {
+        final dir = await getApplicationDocumentsDirectory();
+        return '${dir.path}/$fileName';
+      }
+    } else {
+      // .aac is the Agora-documented encoded format for iOS; .m4a is not recognized.
+      final fileName = 'session_$timestamp.aac';
+      final dir = await getApplicationDocumentsDirectory();
+      return '${dir.path}/$fileName';
+    }
+  }
+
+  Future<void> _startRecording() async {
+    if (!_engineReady) return;
+    try {
+      final path = await _getRecordingPath();
+      debugPrint('Recording path: $path');
+      // Do NOT boost gain here. audioScenarioGameStreaming already captures at
+      // natural levels without aggressive AGC. Manual boosts above ~130% will
+      // push an already-normalized signal past 0 dBFS and cause hard clipping.
+      await _engine.startAudioRecording(
+        AudioRecordingConfiguration(
+          filePath: path,
+          encode: Platform.isIOS,
+          sampleRate: 48000,
+          fileRecordingType: AudioFileRecordingType.audioFileRecordingMixed,
+          quality: Platform.isIOS
+              ? AudioRecordingQualityType.audioRecordingQualityUltraHigh
+              : null,
+        ),
+      );
+      debugPrint('Agora recording started: $path');
+      _lastRecordingPath = path;
+      if (!mounted) return;
+      setState(() => _isRecording = true);
+    } catch (e) {
+      debugPrint('Recording start error: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('فشل بدء التسجيل: $e'),
+          backgroundColor: Colors.red.shade700,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+  }
+
+  Future<void> _stopRecording() async {
+    if (!_engineReady) return;
+    try {
+      await _engine.stopAudioRecording();
+      debugPrint('Agora recording stopped');
+
+      if (_lastRecordingPath != null) {
+        final file = File(_lastRecordingPath!);
+        if (await file.exists()) {
+          final size = await file.length();
+          debugPrint('File size: $size bytes');
+        } else {
+          debugPrint('File does not exist!');
+        }
       }
 
       if (!mounted) return;
-      setState(() {
-        _errorText = 'تعذر بدء الاتصال';
-      });
+      setState(() => _isRecording = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            Platform.isIOS
+                ? 'تم حفظ التسجيل في تطبيق الملفات ✅'
+                : 'تم حفظ التسجيل في مجلد التنزيلات ✅',
+          ),
+          backgroundColor: Colors.green.shade700,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      debugPrint('Recording stop error: $e');
+    }
+  }
+
+  Future<void> _toggleRecording() async {
+    if (_isRecording) {
+      await _stopRecording();
+    } else {
+      await _startRecording();
     }
   }
 
   Future<void> _toggleMute() async {
     if (!_engineReady) return;
-
     final newValue = !_localAudioMuted;
     await _engine.muteLocalAudioStream(newValue);
-
     if (!mounted) return;
     setState(() {
       _localAudioMuted = newValue;
-      if (newValue) {
-        _isLocalSpeaking = false;
-      }
+      if (newValue) _isLocalSpeaking = false;
     });
   }
 
-  /*Future<void> _toggleSpeaker() async {
-    if (!_engineReady) return;
-
-    final newValue = !_speakerEnabled;
-    await _engine.setEnableSpeakerphone(newValue);
-
-    if (!mounted) return;
-    setState(() {
-      _speakerEnabled = newValue;
-    });
-  }*/
-
   Future<void> _toggleSpeaker() async {
     if (!_engineReady) return;
-
     final newValue = !_speakerEnabled;
-
     try {
       await _engine.setEnableSpeakerphone(newValue);
-
-      // 🔥 إعادة تأكيد بعد لحظة (حل مشكلة الضغط مرتين)
+      if (Platform.isIOS && newValue) {
+        await _engine.setDefaultAudioRouteToSpeakerphone(true);
+      }
       Future.delayed(const Duration(milliseconds: 250), () async {
         try {
           await _engine.setEnableSpeakerphone(newValue);
         } catch (_) {}
       });
-
       if (!mounted) return;
-      setState(() {
-        _speakerEnabled = newValue;
-      });
+      setState(() => _speakerEnabled = newValue);
     } catch (_) {}
   }
 
   Future<void> _toggleLocalVideoDirectly() async {
     if (!_engineReady) return;
-
     final newValue = !_localVideoEnabled;
-
     if (newValue) {
       await _engine.enableVideo();
       await _engine.startPreview();
       await _engine.muteLocalVideoStream(false);
       await _engine.updateChannelMediaOptions(
-        const ChannelMediaOptions(
-          publishCameraTrack: true,
-          publishMicrophoneTrack: true,
-        ),
+        const ChannelMediaOptions(publishCameraTrack: true, publishMicrophoneTrack: true),
       );
     } else {
       await _engine.muteLocalVideoStream(true);
       await _engine.stopPreview();
       await _engine.updateChannelMediaOptions(
-        const ChannelMediaOptions(
-          publishCameraTrack: false,
-          publishMicrophoneTrack: true,
-        ),
+        const ChannelMediaOptions(publishCameraTrack: false, publishMicrophoneTrack: true),
       );
     }
-
     if (!mounted) return;
-    setState(() {
-      _localVideoEnabled = newValue;
-    });
+    setState(() => _localVideoEnabled = newValue);
   }
 
   Future<void> _requestVideo() async {
     final approved = await showDialog<bool>(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('تشغيل الفيديو'),
-          content: const Text(
-            'سيتم تشغيل الفيديو من هذا الطرف مباشرة.\n'
-            'ويمكن لاحقًا تطويرها لتكون بموافقة الطرفين.',
+      builder: (context) => AlertDialog(
+        title: const Text('تشغيل الفيديو'),
+        content: const Text(
+          'سيتم تشغيل الفيديو من هذا الطرف مباشرة.\n'
+          'ويمكن لاحقًا تطويرها لتكون بموافقة الطرفين.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(_localVideoEnabled ? 'إيقاف' : 'تشغيل'),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('إلغاء'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: Text(_localVideoEnabled ? 'إيقاف' : 'تشغيل'),
-            ),
-          ],
-        );
-      },
+        ],
+      ),
     );
-
-    if (approved == true) {
-      await _toggleLocalVideoDirectly();
-    }
+    if (approved == true) await _toggleLocalVideoDirectly();
   }
 
   Future<void> _confirmLeave() async {
@@ -557,45 +643,33 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
         title: const Text('إنهاء الجلسة'),
         content: const Text('هل تريد مغادرة الجلسة؟'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('إلغاء'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('نعم'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('نعم')),
         ],
       ),
     );
-
-    if (leave == true) {
-      await _leaveCall();
-    }
+    if (leave == true) await _leaveCall();
   }
 
   Future<void> _leaveCall() async {
     if (_ending) return;
-
-    setState(() {
-      _ending = true;
-    });
+    setState(() => _ending = true);
 
     try {
-      if (widget.onEndSession != null && widget.isTeacher) {
+      if (_isRecording && _engineCreated) {
+        await _engine.stopAudioRecording();
+        setState(() => _isRecording = false);
+      }
+
+      if (widget.isTeacher && widget.onEndSession != null) {
         await widget.onEndSession!();
       }
-
-      if (_engineCreated) {
-        await _engine.leaveChannel();
-      }
-    } catch (_) {}
-
-    try {
-      if (_engineCreated) {
-        await _engine.release();
-      }
-    } catch (_) {}
+      if (_engineCreated) await _engine.leaveChannel();
+      if (_engineCreated) await _engine.release();
+      if (widget.isTeacher) await FlutterForegroundTask.stopService();
+    } catch (e) {
+      debugPrint("LEAVE ERROR: $e");
+    }
 
     if (mounted) Navigator.pop(context);
   }
@@ -635,13 +709,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
               color: const Color(0xFF1E293B),
               shape: BoxShape.circle,
               boxShadow: highlightRemote
-                  ? [
-                      BoxShadow(
-                        color: Colors.greenAccent.withOpacity(0.45),
-                        blurRadius: 24,
-                        spreadRadius: 3,
-                      ),
-                    ]
+                  ? [BoxShadow(color: Colors.greenAccent.withValues(alpha: 0.45), blurRadius: 24, spreadRadius: 3)]
                   : [],
               border: Border.all(
                 color: highlightRemote ? Colors.greenAccent : Colors.white24,
@@ -706,11 +774,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
           Text(
             widget.displayName.isNotEmpty ? widget.displayName : 'الطرف الآخر',
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-            ),
+            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 10),
           Text(
@@ -749,13 +813,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
           width: highlightLocal ? 3 : 1,
         ),
         boxShadow: highlightLocal
-            ? [
-                BoxShadow(
-                  color: Colors.greenAccent.withOpacity(0.45),
-                  blurRadius: 18,
-                  spreadRadius: 3,
-                ),
-              ]
+            ? [BoxShadow(color: Colors.greenAccent.withValues(alpha: 0.45), blurRadius: 18, spreadRadius: 3)]
             : [],
       ),
       child: ClipRRect(
@@ -776,21 +834,32 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
     _remoteSpeakingResetTimer?.cancel();
     _localSpeakingResetTimer?.cancel();
     _pulseController.dispose();
-    if (_engineCreated) {
-      _engine.release();
-    }
+    if (_engineCreated) _engine.release();
     _pingTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!widget.isTeacher) return;
+    if (state == AppLifecycleState.paused) {
+      _engine.setEnableSpeakerphone(_speakerEnabled);
+      debugPrint("Teacher went to background - session continues");
+    } else if (state == AppLifecycleState.resumed) {
+      _engine.setEnableSpeakerphone(_speakerEnabled);
+      debugPrint("Teacher resumed");
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final isLoading = !_engineReady && _errorText == null;
 
-    return WillPopScope(
-      onWillPop: () async {
-        await _confirmLeave();
-        return false;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (!didPop) await _confirmLeave();
       },
       child: Scaffold(
         backgroundColor: const Color(0xFF020617),
@@ -803,13 +872,15 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
             children: [
               Text(widget.title),
               const SizedBox(height: 2),
-              Text(
-                _connectionStatus,
-                style: const TextStyle(fontSize: 12, color: Colors.white70),
-              ),
+              Text(_connectionStatus, style: const TextStyle(fontSize: 12, color: Colors.white70)),
             ],
           ),
           actions: [
+            if (_isRecording)
+              Padding(
+                padding: const EdgeInsetsDirectional.only(end: 8),
+                child: Center(child: _RecordingIndicator()),
+              ),
             Padding(
               padding: const EdgeInsetsDirectional.only(end: 12),
               child: Center(
@@ -832,19 +903,12 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(
-                        Icons.error_outline,
-                        color: Colors.redAccent,
-                        size: 56,
-                      ),
+                      const Icon(Icons.error_outline, color: Colors.redAccent, size: 56),
                       const SizedBox(height: 16),
                       Text(
                         _errorText!,
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                        ),
+                        style: const TextStyle(color: Colors.white, fontSize: 18),
                       ),
                     ],
                   ),
@@ -895,6 +959,13 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
                 isActive: _localVideoEnabled,
               ),
               _ControlButton(
+                icon: _isRecording ? Icons.stop_circle : Icons.fiber_manual_record,
+                label: _isRecording ? 'إيقاف' : 'تسجيل',
+                onTap: _toggleRecording,
+                backgroundColor: _isRecording ? Colors.orange : Colors.red.shade800,
+                isActive: true,
+              ),
+              _ControlButton(
                 icon: Icons.call_end,
                 label: 'إنهاء',
                 onTap: _confirmLeave,
@@ -909,26 +980,66 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
   }
 }
 
+class _RecordingIndicator extends StatefulWidget {
+  @override
+  State<_RecordingIndicator> createState() => _RecordingIndicatorState();
+}
+
+class _RecordingIndicatorState extends State<_RecordingIndicator>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    )..repeat(reverse: true);
+    _anim = Tween<double>(begin: 0.3, end: 1.0).animate(_ctrl);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _anim,
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.fiber_manual_record, color: Colors.redAccent, size: 14),
+          SizedBox(width: 4),
+          Text('REC', style: TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+}
+
 class _ControlButton extends StatelessWidget {
   final IconData icon;
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final Color? backgroundColor;
   final bool isActive;
 
   const _ControlButton({
     required this.icon,
     required this.label,
-    required this.onTap,
+    this.onTap,
     this.backgroundColor,
     required this.isActive,
   });
 
   @override
   Widget build(BuildContext context) {
-    final bg =
-        backgroundColor ??
-        (isActive ? const Color(0xFF2563EB) : const Color(0xFF1E293B));
+    final bg = backgroundColor ?? (isActive ? const Color(0xFF2563EB) : const Color(0xFF1E293B));
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -979,11 +1090,7 @@ class _StatusChip extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
+            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
           ),
         ],
       ),

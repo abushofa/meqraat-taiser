@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../../core/network/api_client.dart';
+import '../../core/utils/time_helper.dart';
 
 class AdminSessionsScreen extends StatefulWidget {
   const AdminSessionsScreen({super.key});
@@ -104,8 +105,10 @@ class _AdminSessionsScreenState extends State<AdminSessionsScreen> {
     final type = '${session['type'] ?? ''}';
     final studentName = '${session['student_name'] ?? '—'}';
     final teacherName = '${session['teacher_name'] ?? '—'}';
-    final startsAt = '${session['starts_at'] ?? '—'}';
-    final endsAt = '${session['ends_at'] ?? '—'}';
+    //final startsAt = '${session['starts_at'] ?? '—'}';
+    final startsAt = TimeHelper.formatTime(session['starts_at']);
+    //final endsAt = '${session['ends_at'] ?? '—'}';
+    final endsAt = TimeHelper.formatTime(session['ends_at']);
     final duration = '${session['duration_minutes'] ?? '—'}';
 
     return Card(
