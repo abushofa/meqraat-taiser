@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/network/api_client.dart';
 import '../../core/ui/app_snackbar.dart';
+import '../../core/widgets/status_badge.dart';
 import '../call/agora_call_screen.dart';
 
 import 'package:package_info_plus/package_info_plus.dart';
@@ -21,6 +22,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   bool _loading = true;
   String? _error;
   Map<String, dynamic>? _data;
+  Map<String, dynamic>? _profileUser;
   Timer? _sessionTimer;
   Map<String, dynamic>? _activeSession;
   int? _lastNotifiedSessionId;
@@ -110,8 +112,21 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 
     try {
       final dio = await ApiClient.getInstance();
-      final response = await dio.get('/student/dashboard.php');
-      final body = response.data;
+
+      final results = await Future.wait([
+        dio.get('/student/dashboard.php'),
+        dio.get('/profile.php'),
+      ]);
+
+      final body = results[0].data;
+      final profileBody = results[1].data;
+
+      if (profileBody is Map && profileBody['ok'] == true) {
+        final profileData = profileBody['data'] as Map?;
+        setState(() {
+          _profileUser = profileData?['user'] as Map<String, dynamic>?;
+        });
+      }
 
       if (body is Map && body['ok'] == true) {
         final parsed = Map<String, dynamic>.from(body['data']);
@@ -346,7 +361,6 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
     final stats = _data?['stats'];
     final lastSession = _data?['last_session'];
 
-    final studentName = student?['name'] ?? '';
     final teacherName = teacher?['name'] ?? 'المُقرئ';
 
     final session = _activeSession ?? lastSession;
@@ -377,7 +391,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            _card('الاسم', studentName),
+            _buildStudentHeader(student as Map<String, dynamic>?, _profileUser),
             const SizedBox(height: 16),
             _DashboardCard(
               child: Column(
@@ -428,6 +442,77 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
             _card('الدقائق', '${stats?['total_minutes'] ?? 0}'),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildStudentHeader(Map<String, dynamic>? student, Map<String, dynamic>? profile) {
+    return _DashboardCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: Color(0xFFE0F2FE),
+                child: Icon(Icons.school, color: Colors.lightBlue),
+              ),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'بيانات الطالب',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _infoTile('الاسم', value: profile?['name']?.toString().trim() ?? '—'),
+          _infoTile('الإيميل', value: profile?['email']?.toString() ?? '—'),
+          _infoTile(
+            'الحالة',
+            trailing: StatusBadge(status: student?['status']?.toString() ?? ''),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _infoTile(String label, {String? value, Widget? trailing}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FAFB),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 2,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF374151),
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: trailing ??
+                Text(
+                  value ?? '—',
+                  textAlign: TextAlign.left,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: Color(0xFF111827),
+                  ),
+                ),
+          ),
+        ],
       ),
     );
   }

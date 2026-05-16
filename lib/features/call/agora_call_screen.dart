@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -91,6 +92,8 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
   Timer? _remoteSpeakingResetTimer;
   Timer? _localSpeakingResetTimer;
   Timer? _pingTimer;
+  Timer? _xiaomiAudioTimer;
+  bool _isXiaomi = false;
 
   @override
   void initState() {
@@ -237,6 +240,29 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
     }
   }
 
+  Future<String> _getDeviceManufacturer() async {
+    if (!Platform.isAndroid) return '';
+    try {
+      final result = await _mediaScanner.invokeMethod<String>('getManufacturer');
+      return result?.toLowerCase() ?? '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  void _startXiaomiAudioWatchdog() {
+    _xiaomiAudioTimer?.cancel();
+    // MIUI can silently kill the audio thread after notifications or screen lock.
+    // Periodically calling enableAudio() restarts it if suspended.
+    _xiaomiAudioTimer = Timer.periodic(const Duration(seconds: 20), (_) async {
+      if (!mounted || !_engineReady) return;
+      try {
+        await _engine.enableAudio();
+        await _setSpeakerOn();
+      } catch (_) {}
+    });
+  }
+
   Future<void> _setSpeakerOn() async {
     await _engine.setEnableSpeakerphone(true);
     if (Platform.isIOS) {
@@ -290,6 +316,9 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
         ),
       );
 
+      final manufacturer = await _getDeviceManufacturer();
+      _isXiaomi = manufacturer.contains('xiaomi') || manufacturer.contains('redmi');
+
       if (Platform.isIOS) {
         await _engine.setDefaultAudioRouteToSpeakerphone(true);
       }
@@ -303,6 +332,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
               await Future.delayed(const Duration(milliseconds: 500));
               await _setSpeakerOn();
             }
+            if (_isXiaomi) _startXiaomiAudioWatchdog();
             setState(() {
               _joined = true;
               _errorText = null;
@@ -464,14 +494,24 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
     }
   }
 
+  static final _mediaScanner = const MethodChannel('com.abushofa.quran_app/media_scanner');
+
+  Future<void> _scanFileOnAndroid(String path) async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _mediaScanner.invokeMethod('scanFile', {'path': path});
+    } catch (_) {}
+  }
+
   Future<String> _getRecordingPath() async {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
 
     if (Platform.isAndroid) {
+      // ASCII folder name avoids MIUI path-handling bugs with Arabic characters.
       final fileName = 'session_$timestamp.wav';
       try {
         await Permission.storage.request();
-        final dir = Directory('/storage/emulated/0/Download/مقرأة التيسير');
+        final dir = Directory('/storage/emulated/0/Download/AlTayseer');
         if (!await dir.exists()) await dir.create(recursive: true);
         return '${dir.path}/$fileName';
       } catch (_) {
@@ -533,6 +573,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
         if (await file.exists()) {
           final size = await file.length();
           debugPrint('File size: $size bytes');
+          await _scanFileOnAndroid(_lastRecordingPath!);
         } else {
           debugPrint('File does not exist!');
         }
@@ -833,6 +874,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
     _sessionTimer?.cancel();
     _remoteSpeakingResetTimer?.cancel();
     _localSpeakingResetTimer?.cancel();
+    _xiaomiAudioTimer?.cancel();
     _pulseController.dispose();
     if (_engineCreated) _engine.release();
     _pingTimer?.cancel();
@@ -842,6 +884,11 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _isXiaomi && _engineReady) {
+      // MIUI may have suspended the audio thread while in background.
+      _engine.enableAudio();
+      _setSpeakerOn();
+    }
     if (!widget.isTeacher) return;
     if (state == AppLifecycleState.paused) {
       _engine.setEnableSpeakerphone(_speakerEnabled);

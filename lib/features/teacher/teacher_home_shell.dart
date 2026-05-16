@@ -95,7 +95,7 @@ class _TeacherHomeShellState extends State<TeacherHomeShell> {
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 2),
-            const Text('منصة تعليم القرآن', style: TextStyle(fontSize: 11)),
+            //const Text('منصة تعليم القرآن', style: TextStyle(fontSize: 11)),
           ],
         ),
         actions: [
