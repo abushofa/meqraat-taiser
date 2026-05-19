@@ -10,8 +10,6 @@ import '../../core/widgets/status_badge.dart';
 import '../../core/ui/app_snackbar.dart';
 import '../call/agora_call_screen.dart';
 
-import 'package:package_info_plus/package_info_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../core/utils/update_checker.dart';
 
 class TeacherDashboardScreen extends StatefulWidget {
@@ -35,67 +33,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     Future.delayed(const Duration(seconds: 2), () {
       UpdateChecker.check(context); //checkForUpdate(context);
     });
-  }
-
-  Future<void> checkForUpdate(BuildContext context) async {
-    try {
-      final dio = await ApiClient.getInstance();
-      final res = await dio.get('/app/version.php');
-
-      final data = res.data['data'];
-
-      final latest = data['latest_version'];
-      final url = data['apk_url'];
-      final force = data['force_update'] == true;
-
-      final info = await PackageInfo.fromPlatform();
-      final current = info.version;
-
-      if (_isUpdateAvailable(current, latest)) {
-        _showUpdateDialog(context, url, force);
-      }
-    } catch (_) {
-      // تجاهل أي خطأ
-    }
-  }
-
-  bool _isUpdateAvailable(String current, String latest) {
-    List<int> c = current.split('.').map(int.parse).toList();
-    List<int> l = latest.split('.').map(int.parse).toList();
-
-    for (int i = 0; i < l.length; i++) {
-      if (c.length <= i) return true;
-      if (l[i] > c[i]) return true;
-      if (l[i] < c[i]) return false;
-    }
-    return false;
-  }
-
-  void _showUpdateDialog(BuildContext context, String url, bool force) {
-    showDialog(
-      context: context,
-      barrierDismissible: !force,
-      builder: (_) => AlertDialog(
-        title: const Text('تحديث جديد متوفر'),
-        content: const Text(
-          'يوجد إصدار جديد من التطبيق لتحسين الأداء وإصلاح المشاكل.',
-        ),
-        actions: [
-          if (!force)
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('لاحقاً'),
-            ),
-          ElevatedButton(
-            onPressed: () async {
-              final uri = Uri.parse(url);
-              await launchUrl(uri, mode: LaunchMode.externalApplication);
-            },
-            child: const Text('تحديث الآن'),
-          ),
-        ],
-      ),
-    );
   }
 
   String _sanitizeAppId(String value) {
@@ -185,39 +122,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     return granted;
   }
 
-  Future<void> _startRecording(int sessionId) async {
-    final dio = await ApiClient.getInstance();
-    final response = await dio.post(
-      '/teacher/start_recording.php',
-      data: {'session_id': sessionId},
-    );
-
-    final body = response.data;
-
-    if (body is! Map || body['ok'] != true) {
-      throw Exception(
-        (body is Map ? body['message'] : null)?.toString() ?? 'فشل بدء التسجيل',
-      );
-    }
-  }
-
-  Future<void> _stopRecording(int sessionId) async {
-    final dio = await ApiClient.getInstance();
-    final response = await dio.post(
-      '/teacher/stop_recording.php',
-      data: {'session_id': sessionId},
-    );
-
-    final body = response.data;
-
-    if (body is! Map || body['ok'] != true) {
-      throw Exception(
-        (body is Map ? body['message'] : null)?.toString() ??
-            'فشل إيقاف التسجيل',
-      );
-    }
-  }
-
   Future<void> _endSessionByApi(int sessionId) async {
     final dio = await ApiClient.getInstance();
     final response = await dio.post(
@@ -287,14 +191,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
     if (!mounted) return;
 
-    Future.microtask(() async {
-      try {
-        await _startRecording(sessionId);
-      } catch (e) {
-        //debugPrint('START RECORDING ERROR: $e');
-      }
-    });
-
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -308,12 +204,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           isTeacher: true,
           sessionId: sessionId,
           onEndSession: () async {
-            try {
-              await _stopRecording(sessionId);
-            } catch (e) {
-              //debugPrint('STOP RECORDING ERROR: $e');
-            }
-
             await _endSessionByApi(sessionId);
           },
         ),
@@ -333,7 +223,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
       final response = await dio.post(
         '/teacher/start_session.php',
-        data: {'student_id': studentId, 'recording_enabled': 1},
+        data: {'student_id': studentId},
         options: Options(
           responseType: ResponseType.plain, // ✅ مهم جدًا لمنع crash
         ),
@@ -427,7 +317,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
       final response = await dio.post(
         '/teacher/start_session.php',
-        data: {'is_group': 1, 'recording_enabled': 1},
+        data: {'is_group': 1},
       );
 
       final body = response.data;
@@ -838,16 +728,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
                   _startIndividualSession(
                     int.parse(s['student_id'].toString()),
-
                     (s['name'] ?? '').toString(),
-
                     teacherName,
                   );
-                  /*_startIndividualSession(
-                    int.parse(s['student_id'].toString()),
-                    (s['name'] ?? '').toString(),
-                    teacherName,
-                  );*/
                 },
               ),
             ),

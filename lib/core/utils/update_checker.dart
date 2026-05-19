@@ -7,7 +7,7 @@ class UpdateChecker {
   static Future<void> check(BuildContext context) async {
     try {
       final dio = Dio();
-      final res = await dio.get('https://YOUR-DOMAIN/api/version.php');
+      final res = await dio.get('https://taiser.net/Quran/api/version.php');
 
       final data = res.data;
 

@@ -294,8 +294,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
               AVAudioSessionCategoryOptions.allowBluetoothA2dp |
               AVAudioSessionCategoryOptions.defaultToSpeaker
             : AVAudioSessionCategoryOptions.allowBluetooth,
-        // Use defaultMode instead of voiceChat: voiceChat routes to earpiece by default
-        // and conflicts with Agora's own audio session management on iOS.
+        // defaultMode avoids earpiece routing that voiceChat enforces on iOS.
         avAudioSessionMode: AVAudioSessionMode.defaultMode,
         avAudioSessionRouteSharingPolicy: AVAudioSessionRouteSharingPolicy.defaultPolicy,
         androidAudioAttributes: const AndroidAudioAttributes(
@@ -312,7 +311,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
       await _engine.initialize(
         RtcEngineContext(
           appId: appId,
-          channelProfile: ChannelProfileType.channelProfileCommunication,
+          channelProfile: ChannelProfileType.channelProfileLiveBroadcasting,
         ),
       );
 
@@ -405,7 +404,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
             } else if (state == ConnectionStateType.connectionStateDisconnected) {
               setState(() => _connectionStatus = 'انقطع الاتصال');
             } else if (state == ConnectionStateType.connectionStateFailed) {
-              if (!_joined) setState(() => _errorText = 'فشل الاتصال');
+              if (!_joined) setState(() => _errorText = 'فشل الاتصال: ${reason.name}');
             }
           },
           onActiveSpeaker: (connection, speakerUid) {
@@ -437,7 +436,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
             if (_isIgnorableAgoraError(err, msg)) return;
             if (!mounted) return;
             if (_joined) return;
-            setState(() => _errorText = 'حدث خطأ في الاتصال');
+            setState(() => _errorText = 'خطأ: ${err.name} ($msg)');
           },
         ),
       );
@@ -508,7 +507,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
 
     if (Platform.isAndroid) {
       // ASCII folder name avoids MIUI path-handling bugs with Arabic characters.
-      final fileName = 'session_$timestamp.wav';
+      final fileName = 'session_$timestamp.aac';
       try {
         await Permission.storage.request();
         final dir = Directory('/storage/emulated/0/Download/AlTayseer');
@@ -519,7 +518,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
         return '${dir.path}/$fileName';
       }
     } else {
-      // .aac is the Agora-documented encoded format for iOS; .m4a is not recognized.
+      // .aac is the Agora-documented encoded format; .m4a is not recognized.
       final fileName = 'session_$timestamp.aac';
       final dir = await getApplicationDocumentsDirectory();
       return '${dir.path}/$fileName';
@@ -531,18 +530,15 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
     try {
       final path = await _getRecordingPath();
       debugPrint('Recording path: $path');
-      // Do NOT boost gain here. audioScenarioGameStreaming already captures at
-      // natural levels without aggressive AGC. Manual boosts above ~130% will
-      // push an already-normalized signal past 0 dBFS and cause hard clipping.
       await _engine.startAudioRecording(
         AudioRecordingConfiguration(
           filePath: path,
-          encode: Platform.isIOS,
+          encode: true,
           sampleRate: 48000,
           fileRecordingType: AudioFileRecordingType.audioFileRecordingMixed,
           quality: Platform.isIOS
               ? AudioRecordingQualityType.audioRecordingQualityUltraHigh
-              : null,
+              : AudioRecordingQualityType.audioRecordingQualityHigh,
         ),
       );
       debugPrint('Agora recording started: $path');
@@ -699,6 +695,9 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
     try {
       if (_isRecording && _engineCreated) {
         await _engine.stopAudioRecording();
+        if (_lastRecordingPath != null) {
+          await _scanFileOnAndroid(_lastRecordingPath!);
+        }
         setState(() => _isRecording = false);
       }
 

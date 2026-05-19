@@ -1,14 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:url_launcher/url_launcher.dart';
-
 import '../../core/network/api_client.dart';
 import '../../core/ui/app_snackbar.dart';
 import '../../core/widgets/status_badge.dart';
 import '../call/agora_call_screen.dart';
 
-import 'package:package_info_plus/package_info_plus.dart';
 import '../../core/utils/update_checker.dart';
 
 class StudentDashboardScreen extends StatefulWidget {
@@ -27,10 +24,6 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   Map<String, dynamic>? _activeSession;
   int? _lastNotifiedSessionId;
 
-  String? _recordingUrl;
-  String _recordingStatus = 'none';
-  bool _recordingLoading = false;
-
   bool _joiningSession = false;
 
   @override
@@ -41,67 +34,6 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
     Future.delayed(const Duration(seconds: 2), () {
       UpdateChecker.check(context); //checkForUpdate(context);
     });
-  }
-
-  Future<void> checkForUpdate(BuildContext context) async {
-    try {
-      final dio = await ApiClient.getInstance();
-      final res = await dio.get('/app/version.php');
-
-      final data = res.data['data'];
-
-      final latest = data['latest_version'];
-      final url = data['apk_url'];
-      final force = data['force_update'] == true;
-
-      final info = await PackageInfo.fromPlatform();
-      final current = info.version;
-
-      if (_isUpdateAvailable(current, latest)) {
-        _showUpdateDialog(context, url, force);
-      }
-    } catch (_) {
-      // تجاهل أي خطأ
-    }
-  }
-
-  bool _isUpdateAvailable(String current, String latest) {
-    List<int> c = current.split('.').map(int.parse).toList();
-    List<int> l = latest.split('.').map(int.parse).toList();
-
-    for (int i = 0; i < l.length; i++) {
-      if (c.length <= i) return true;
-      if (l[i] > c[i]) return true;
-      if (l[i] < c[i]) return false;
-    }
-    return false;
-  }
-
-  void _showUpdateDialog(BuildContext context, String url, bool force) {
-    showDialog(
-      context: context,
-      barrierDismissible: !force,
-      builder: (_) => AlertDialog(
-        title: const Text('تحديث جديد متوفر'),
-        content: const Text(
-          'يوجد إصدار جديد من التطبيق لتحسين الأداء وإصلاح المشاكل.',
-        ),
-        actions: [
-          if (!force)
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('لاحقاً'),
-            ),
-          ElevatedButton(
-            onPressed: () async {
-              final uri = Uri.parse(url);
-              await launchUrl(uri, mode: LaunchMode.externalApplication);
-            },
-            child: const Text('تحديث الآن'),
-          ),
-        ],
-      ),
-    );
   }
 
   Future<void> _loadDashboard() async {
@@ -135,17 +67,6 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
           _data = parsed;
         });
 
-        final lastSession = parsed['last_session'];
-        final sessionId = int.tryParse('${lastSession?['id'] ?? ''}');
-
-        if (sessionId != null && sessionId > 0) {
-          await _loadRecording(sessionId);
-        } else {
-          setState(() {
-            _recordingStatus = 'none';
-            _recordingUrl = null;
-          });
-        }
       } else {
         setState(() {
           _error =
@@ -159,43 +80,6 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
       });
     } finally {
       setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _loadRecording(int sessionId) async {
-    setState(() {
-      _recordingLoading = true;
-    });
-
-    try {
-      final dio = await ApiClient.getInstance();
-      final response = await dio.get(
-        '/student/get_recording.php',
-        queryParameters: {'session_id': sessionId},
-      );
-
-      final body = response.data;
-
-      if (body is Map && body['ok'] == true) {
-        setState(() {
-          _recordingStatus = body['status']?.toString() ?? 'none';
-          _recordingUrl = body['url']?.toString();
-        });
-      } else {
-        setState(() {
-          _recordingStatus = 'none';
-          _recordingUrl = null;
-        });
-      }
-    } catch (_) {
-      setState(() {
-        _recordingStatus = 'none';
-        _recordingUrl = null;
-      });
-    } finally {
-      setState(() {
-        _recordingLoading = false;
-      });
     }
   }
 
@@ -345,15 +229,6 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
     }
   }
 
-  Future<void> _downloadRecording() async {
-    if (_recordingUrl == null || _recordingUrl!.isEmpty) return;
-
-    final uri = Uri.tryParse(_recordingUrl!);
-    if (uri == null) return;
-
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
-
   @override
   Widget build(BuildContext context) {
     final student = _data?['student'];
@@ -419,21 +294,6 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                     )
                   else
                     const Text('لا توجد جلسة'),
-                  const SizedBox(height: 12),
-                  if (_recordingLoading)
-                    const CircularProgressIndicator()
-                  else if (_recordingStatus == 'ready' &&
-                      _recordingUrl != null &&
-                      _recordingUrl!.isNotEmpty)
-                    ElevatedButton.icon(
-                      onPressed: _downloadRecording,
-                      icon: const Icon(Icons.download),
-                      label: const Text('تحميل التسجيل'),
-                    )
-                  else if (_recordingStatus == 'processing')
-                    const Text('⏳ التسجيل قيد التجهيز')
-                  else
-                    const SizedBox(),
                 ],
               ),
             ),
