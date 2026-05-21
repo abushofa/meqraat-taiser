@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 import '../../core/network/api_client.dart';
 import 'package:audio_session/audio_session.dart';
 
@@ -495,31 +494,18 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
 
   static final _mediaScanner = const MethodChannel('com.abushofa.quran_app/media_scanner');
 
-  Future<void> _scanFileOnAndroid(String path) async {
-    if (!Platform.isAndroid) return;
-    try {
-      await _mediaScanner.invokeMethod('scanFile', {'path': path});
-    } catch (_) {}
-  }
 
   Future<String> _getRecordingPath() async {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final fileName = 'session_$timestamp.aac';
 
     if (Platform.isAndroid) {
-      // ASCII folder name avoids MIUI path-handling bugs with Arabic characters.
-      final fileName = 'session_$timestamp.aac';
-      try {
-        await Permission.storage.request();
-        final dir = Directory('/storage/emulated/0/Download/AlTayseer');
-        if (!await dir.exists()) await dir.create(recursive: true);
-        return '${dir.path}/$fileName';
-      } catch (_) {
-        final dir = await getApplicationDocumentsDirectory();
-        return '${dir.path}/$fileName';
-      }
+      // Record to temp cache; after stopping we move to Downloads via MediaStore
+      // so files are visible on Xiaomi/Huawei without MANAGE_ALL_FILES permission.
+      final dir = await getTemporaryDirectory();
+      return '${dir.path}/$fileName';
     } else {
       // .aac is the Agora-documented encoded format; .m4a is not recognized.
-      final fileName = 'session_$timestamp.aac';
       final dir = await getApplicationDocumentsDirectory();
       return '${dir.path}/$fileName';
     }
@@ -569,7 +555,19 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
         if (await file.exists()) {
           final size = await file.length();
           debugPrint('File size: $size bytes');
-          await _scanFileOnAndroid(_lastRecordingPath!);
+          if (Platform.isAndroid) {
+            // Move temp file to public Downloads via MediaStore (works on Xiaomi/Huawei).
+            final fileName = _lastRecordingPath!.split('/').last;
+            try {
+              await _mediaScanner.invokeMethod('saveToDownloads', {
+                'path': _lastRecordingPath,
+                'fileName': fileName,
+              });
+              debugPrint('Saved to Downloads: $fileName');
+            } catch (e) {
+              debugPrint('saveToDownloads error: $e');
+            }
+          }
         } else {
           debugPrint('File does not exist!');
         }
@@ -695,8 +693,17 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
     try {
       if (_isRecording && _engineCreated) {
         await _engine.stopAudioRecording();
-        if (_lastRecordingPath != null) {
-          await _scanFileOnAndroid(_lastRecordingPath!);
+        if (_lastRecordingPath != null && Platform.isAndroid) {
+          final file = File(_lastRecordingPath!);
+          if (await file.exists()) {
+            try {
+              final fileName = _lastRecordingPath!.split('/').last;
+              await _mediaScanner.invokeMethod('saveToDownloads', {
+                'path': _lastRecordingPath,
+                'fileName': fileName,
+              });
+            } catch (_) {}
+          }
         }
         setState(() => _isRecording = false);
       }
