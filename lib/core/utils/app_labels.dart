@@ -7,6 +7,8 @@ class AppLabels {
         return 'معتمد';
       case 'rejected':
         return 'مرفوض';
+      case 'waitlisted':
+        return 'انتظار';
       case 'started':
         return 'نشطة';
       case 'ended':

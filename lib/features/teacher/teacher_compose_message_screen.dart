@@ -1,6 +1,6 @@
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../../core/network/api_client.dart';
+import '../../core/ui/app_snackbar.dart';
 
 class TeacherComposeMessageScreen extends StatefulWidget {
   const TeacherComposeMessageScreen({super.key});
@@ -14,10 +14,10 @@ class _TeacherComposeMessageScreenState
     extends State<TeacherComposeMessageScreen> {
   bool _loadingStudents = true;
   bool _sending = false;
-  String? _error;
 
-  List students = [];
+  List _students = [];
 
+  // modes: one_student | all_my_students | to_admin
   String _mode = 'one_student';
   int? _selectedStudentUserId;
 
@@ -30,168 +30,90 @@ class _TeacherComposeMessageScreenState
     _loadStudents();
   }
 
-  Future<void> _loadStudents() async {
-    if (mounted) {
-      setState(() {
-        _loadingStudents = true;
-        _error = null;
-      });
-    }
-
-    try {
-      final dio = await ApiClient.getInstance();
-      final response = await dio.get('/teacher/dashboard.php');
-      final body = response.data;
-
-      if (body is Map && body['ok'] == true) {
-        final loadedStudents = body['data']?['students'] as List? ?? [];
-
-        if (mounted) {
-          setState(() {
-            students = loadedStudents;
-            if (students.isNotEmpty) {
-              _selectedStudentUserId = int.tryParse(
-                students.first['user_id'].toString(),
-              );
-            }
-          });
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            _error =
-                (body is Map ? body['message'] : null)?.toString() ??
-                'تعذر تحميل الطلاب';
-          });
-        }
-      }
-    } on DioException catch (e) {
-      String message = 'فشل الاتصال بالخادم';
-      if (e.response?.data is Map) {
-        message = e.response?.data['message']?.toString() ?? message;
-      } else if (e.message != null) {
-        message = e.message!;
-      }
-
-      if (mounted) {
-        setState(() {
-          _error = message;
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _error = 'حدث خطأ غير متوقع';
-        });
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _loadingStudents = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _sendMessage() async {
-    final title = _titleController.text.trim();
-    final body = _bodyController.text.trim();
-
-    if (body.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('نص الرسالة مطلوب')));
-      return;
-    }
-
-    if (_mode == 'one_student' &&
-        (_selectedStudentUserId == null || _selectedStudentUserId! <= 0)) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('اختر طالبًا')));
-      return;
-    }
-
-    if (mounted) {
-      setState(() {
-        _sending = true;
-      });
-    }
-
-    try {
-      final dio = await ApiClient.getInstance();
-
-      final Map<String, dynamic> payload = {
-        'mode': _mode,
-        'title': title,
-        'body': body,
-      };
-
-      if (_mode == 'one_student') {
-        payload['student_user_id'] = _selectedStudentUserId;
-      }
-      final response = await dio.post(
-        '/teacher/send_message.php',
-        data: payload,
-      );
-
-      final resBody = response.data;
-
-      if (resBody is Map && resBody['ok'] == true) {
-        if (!mounted) return;
-
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('تم إرسال الرسالة بنجاح')));
-
-        _titleController.clear();
-        _bodyController.clear();
-
-        Navigator.pop(context, true);
-      } else {
-        if (!mounted) return;
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              (resBody is Map ? resBody['message'] : null)?.toString() ??
-                  'تعذر إرسال الرسالة',
-            ),
-          ),
-        );
-      }
-    } on DioException catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.response?.data is Map
-                ? e.response?.data['message']?.toString() ?? 'فشل الاتصال'
-                : 'فشل الاتصال بالخادم',
-          ),
-        ),
-      );
-    } catch (_) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('حدث خطأ غير متوقع')));
-    } finally {
-      if (mounted) {
-        setState(() {
-          _sending = false;
-        });
-      }
-    }
-  }
-
   @override
   void dispose() {
     _titleController.dispose();
     _bodyController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadStudents() async {
+    try {
+      final dio = await ApiClient.getInstance();
+      final response = await dio.get('/teacher/dashboard.php');
+      final body = response.data;
+      if (body is Map && body['ok'] == true && mounted) {
+        final loaded = body['data']?['students'] as List? ?? [];
+        setState(() {
+          _students = loaded;
+          if (_students.isNotEmpty) {
+            _selectedStudentUserId =
+                int.tryParse(_students.first['user_id'].toString());
+          }
+        });
+      }
+    } catch (_) {}
+    finally {
+      if (mounted) setState(() => _loadingStudents = false);
+    }
+  }
+
+  Future<void> _send() async {
+    final title = _titleController.text.trim();
+    final body = _bodyController.text.trim();
+
+    if (body.isEmpty) {
+      AppSnackBar.error(context, 'نص الرسالة مطلوب');
+      return;
+    }
+    if (_mode == 'one_student' &&
+        (_selectedStudentUserId == null || _selectedStudentUserId! <= 0)) {
+      AppSnackBar.error(context, 'اختر طالباً');
+      return;
+    }
+
+    setState(() => _sending = true);
+    try {
+      final dio = await ApiClient.getInstance();
+
+      if (_mode == 'to_admin') {
+        final res = await dio.post('/teacher/request_to_admin.php', data: {
+          'title': title,
+          'body': body,
+        });
+        if (!mounted) return;
+        final rb = res.data;
+        if (rb is Map && rb['ok'] == true) {
+          AppSnackBar.info(context, 'تم إرسال الرسالة للمشرف');
+          Navigator.pop(context, true);
+        } else {
+          AppSnackBar.error(context,
+              (rb is Map ? rb['message'] : null)?.toString() ?? 'فشل الإرسال');
+        }
+      } else {
+        final payload = <String, dynamic>{
+          'mode': _mode,
+          'title': title,
+          'body': body,
+        };
+        if (_mode == 'one_student') payload['student_user_id'] = _selectedStudentUserId;
+
+        final res = await dio.post('/teacher/send_message.php', data: payload);
+        if (!mounted) return;
+        final rb = res.data;
+        if (rb is Map && rb['ok'] == true) {
+          AppSnackBar.info(context, 'تم إرسال الرسالة بنجاح');
+          Navigator.pop(context, true);
+        } else {
+          AppSnackBar.error(context,
+              (rb is Map ? rb['message'] : null)?.toString() ?? 'فشل الإرسال');
+        }
+      }
+    } catch (_) {
+      if (mounted) AppSnackBar.error(context, 'فشل الاتصال بالخادم');
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
   }
 
   @override
@@ -200,109 +122,105 @@ class _TeacherComposeMessageScreenState
       appBar: AppBar(title: const Text('إرسال رسالة'), centerTitle: true),
       body: _loadingStudents
           ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Text(
-                  _error!,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.red),
-                ),
-              ),
-            )
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                const Text(
-                  'نوع الإرسال',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                RadioListTile<String>(
-                  value: 'one_student',
-                  groupValue: _mode,
-                  title: const Text('طالب واحد'),
-                  onChanged: (value) {
-                    setState(() {
-                      _mode = value!;
-                    });
-                  },
-                ),
-                RadioListTile<String>(
-                  value: 'all_my_students',
-                  groupValue: _mode,
-                  title: const Text('كل طلابي'),
-                  onChanged: (value) {
-                    setState(() {
-                      _mode = value!;
-                    });
-                  },
+                const Text('نوع الإرسال',
+                    style:
+                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+
+                // Mode chips
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    _modeChip('one_student', 'طالب واحد', Icons.person_outline),
+                    _modeChip('all_my_students', 'كل طلابي', Icons.group_outlined),
+                    _modeChip('to_admin', 'للمشرف', Icons.admin_panel_settings_outlined),
+                  ],
                 ),
 
                 if (_mode == 'one_student') ...[
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
                   DropdownButtonFormField<int>(
                     initialValue: _selectedStudentUserId,
                     decoration: const InputDecoration(
                       labelText: 'اختر الطالب',
                       border: OutlineInputBorder(),
                     ),
-                    items: students.map<DropdownMenuItem<int>>((s) {
-                      final userId = int.tryParse(s['user_id'].toString()) ?? 0;
-                      final name = s['name']?.toString() ?? '';
+                    items: _students.map<DropdownMenuItem<int>>((s) {
+                      final userId =
+                          int.tryParse(s['user_id'].toString()) ?? 0;
                       return DropdownMenuItem<int>(
                         value: userId,
-                        child: Text(name),
+                        child: Text(s['name']?.toString() ?? ''),
                       );
                     }).toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedStudentUserId = value;
-                      });
-                    },
+                    onChanged: (v) => setState(() => _selectedStudentUserId = v),
                   ),
                 ],
 
                 const SizedBox(height: 16),
-
                 TextField(
                   controller: _titleController,
                   decoration: const InputDecoration(
-                    labelText: 'عنوان الرسالة',
+                    labelText: 'العنوان (اختياري)',
                     border: OutlineInputBorder(),
                   ),
                 ),
-
-                const SizedBox(height: 16),
-
+                const SizedBox(height: 12),
                 TextField(
                   controller: _bodyController,
                   maxLines: 6,
                   decoration: const InputDecoration(
-                    labelText: 'نص الرسالة',
+                    labelText: 'نص الرسالة *',
                     border: OutlineInputBorder(),
                     alignLabelWithHint: true,
                   ),
                 ),
-
                 const SizedBox(height: 20),
 
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
-                    onPressed: _sending ? null : _sendMessage,
+                    onPressed: _sending ? null : _send,
                     icon: _sending
                         ? const SizedBox(
                             width: 18,
                             height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
                         : const Icon(Icons.send),
                     label: Text(_sending ? 'جارٍ الإرسال...' : 'إرسال'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      backgroundColor: const Color(0xFF0F766E),
+                      foregroundColor: Colors.white,
+                    ),
                   ),
                 ),
               ],
             ),
+    );
+  }
+
+  Widget _modeChip(String value, String label, IconData icon) {
+    final selected = _mode == value;
+    return ChoiceChip(
+      avatar: Icon(icon, size: 16,
+          color: selected ? Colors.white : const Color(0xFF0F766E)),
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => setState(() {
+        _mode = value;
+        _selectedStudentUserId = null;
+      }),
+      selectedColor: const Color(0xFF0F766E),
+      labelStyle: TextStyle(
+        color: selected ? Colors.white : Colors.black87,
+        fontWeight: FontWeight.w600,
+      ),
     );
   }
 }

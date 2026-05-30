@@ -25,6 +25,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   bool _loading = true;
   String? _error;
   Map<String, dynamic>? _data;
+  List<Map<String, dynamic>> _waitlisted = [];
 
   @override
   void initState() {
@@ -62,6 +63,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             _data = Map<String, dynamic>.from(body['data'] as Map);
           });
         }
+        _loadWaitlisted();
       } else {
         if (mounted) {
           setState(() {
@@ -98,6 +100,99 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         });
       }
     }
+  }
+
+  Future<void> _loadWaitlisted() async {
+    try {
+      final dio = await ApiClient.getInstance();
+      final res = await dio.get('/teacher/waitlisted_students.php');
+      final body = res.data;
+      if (body is Map && body['ok'] == true && mounted) {
+        final list = (body['data']?['waitlisted'] as List?) ?? [];
+        setState(() {
+          _waitlisted = list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        });
+      }
+    } catch (_) {
+    }
+  }
+
+  String _arabicCount(int n, String singular, String dual, String plural) {
+    if (n == 1) return singular;
+    if (n == 2) return dual;
+    return '$n $plural';
+  }
+
+  String _formatRemaining(String? expectedDateStr) {
+    if (expectedDateStr == null) return '—';
+    final expected = DateTime.tryParse(expectedDateStr);
+    if (expected == null) return '—';
+    final diff = expected.difference(DateTime.now());
+    if (diff.isNegative) return 'قريباً';
+    final days = diff.inDays;
+    final months = days ~/ 30;
+    final weeks = (days % 30) ~/ 7;
+    final rem = (days % 30) % 7;
+    final parts = <String>[];
+    if (months > 0) parts.add(_arabicCount(months, 'شهر', 'شهران', 'شهور'));
+    if (weeks > 0) parts.add(_arabicCount(weeks, 'أسبوع', 'أسبوعان', 'أسابيع'));
+    if (rem > 0) parts.add(_arabicCount(rem, 'يوم', 'يومان', 'أيام'));
+    return parts.isEmpty ? 'قريباً' : parts.join(' و ');
+  }
+
+  Future<void> _sendRequestToAdmin(int studentId, String message) async {
+    try {
+      final dio = await ApiClient.getInstance();
+      final res = await dio.post(
+        '/teacher/request_to_admin.php',
+        data: {'student_id': studentId, 'message': message},
+      );
+      final body = res.data;
+      if (!mounted) return;
+      if (body is Map && body['ok'] == true) {
+        AppSnackBar.info(context, 'تم إرسال الطلب للمشرف');
+      } else {
+        AppSnackBar.error(context, (body is Map ? body['message'] : null)?.toString() ?? 'فشل الإرسال');
+      }
+    } catch (_) {
+      if (mounted) AppSnackBar.error(context, 'فشل الاتصال بالخادم');
+    }
+  }
+
+  void _showRequestDialog(Map<String, dynamic> student) {
+    final controller = TextEditingController();
+    final studentId = int.tryParse('${student['student_id'] ?? ''}') ?? 0;
+    final studentName = student['name']?.toString() ?? '';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('طلب بخصوص $studentName'),
+        content: TextField(
+          controller: controller,
+          maxLines: 5,
+          decoration: const InputDecoration(
+            hintText: 'اكتب طلبك للمشرف هنا...',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final msg = controller.text.trim();
+              if (msg.isEmpty) return;
+              Navigator.pop(ctx);
+              _sendRequestToAdmin(studentId, msg);
+            },
+            child: const Text('إرسال'),
+          ),
+        ],
+      ),
+    ).then((_) => controller.dispose());
   }
 
   Future<bool> _ensureMediaPermissions() async {
@@ -144,6 +239,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     required String title,
     required int sessionId,
     required String displayName,
+    bool isGroupSession = false,
   }) async {
     if (!mounted) return;
 
@@ -173,6 +269,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     }
 
     if (_showAgoraDebug) {
+      if (!mounted) return;
       await showDialog(
         context: context,
         builder: (_) => AlertDialog(
@@ -203,6 +300,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           displayName: displayName,
           isTeacher: true,
           sessionId: sessionId,
+          isGroupSession: isGroupSession,
           onEndSession: () async {
             await _endSessionByApi(sessionId);
           },
@@ -332,6 +430,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             title: 'الجلسة الجماعية',
             sessionId: int.parse(session['id'].toString()),
             displayName: 'مجموعة من الطلاب',
+            isGroupSession: true,
           );
         } else {
           if (!mounted) return;
@@ -432,6 +531,8 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             _buildStatsSection(context, stats),
             const SizedBox(height: 16),
             _buildStudentsSection(students, teacherName),
+            const SizedBox(height: 16),
+            _buildWaitlistSection(),
           ],
         ),
       ),
@@ -552,6 +653,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                           title: 'الجلسة الجماعية',
                           sessionId: int.parse(sessionIdValue.toString()),
                           displayName: teacherName,
+                          isGroupSession: true,
                         );
                       },
                     ),
@@ -775,6 +877,126 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                 ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildWaitlistSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'قائمة الانتظار',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 12),
+        if (_waitlisted.isEmpty)
+          _DashboardCard(
+            child: const Text(
+              'لا يوجد طلاب في قائمة الانتظار',
+              style: TextStyle(fontSize: 15),
+            ),
+          )
+        else
+          ..._waitlisted.map((s) => _waitlistedStudentCard(s)),
+      ],
+    );
+  }
+
+  Widget _waitlistedStudentCard(Map<String, dynamic> s) {
+    final expectedDate = s['expected_start_date']?.toString();
+    final remaining = _formatRemaining(expectedDate);
+    final position = s['waitlist_position'];
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: _DashboardCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 22,
+                  backgroundColor: Colors.amber.shade100,
+                  child: Text(
+                    (s['name']?.toString().isNotEmpty ?? false)
+                        ? s['name'].toString()[0]
+                        : 'ط',
+                    style: TextStyle(
+                      color: Colors.amber.shade800,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    s['name']?.toString() ?? '',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+                if (position != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade700,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '#$position',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _miniInfoRow('القراءة المطلوبة', AppLabels.qiraa(s['reading_type']?.toString())),
+            if (s['preferred_period'] != null)
+              _miniInfoRow('الفترة المفضلة', AppLabels.period(s['preferred_period']?.toString())),
+            if (expectedDate != null) ...[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('التاريخ المتوقع للانضمام:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  Text(expectedDate, style: const TextStyle(fontSize: 13)),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('المدة المتبقية:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  Text(remaining, style: TextStyle(fontSize: 13, color: Colors.amber.shade800)),
+                ],
+              ),
+            ],
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.send_outlined, size: 16),
+                label: const Text('طلب تعديل مدة الانتظار'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.amber.shade700,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: () => _showRequestDialog(s),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

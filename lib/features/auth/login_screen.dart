@@ -8,6 +8,7 @@ import '../admin/admin_home_shell.dart';
 import 'student_register_screen.dart';
 import 'teacher_register_screen.dart';
 import '../../core/storage/session_storage.dart';
+import '../../core/notifications/push_notification_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -116,6 +117,7 @@ class _LoginScreenState extends State<LoginScreen>
         final user = data['data']?['user'];
         final role = user?['role'];
         await SessionStorage.setLoggedIn(true);
+        PushNotificationService.registerTokenAfterLogin();
 
         if (!mounted) return;
 

@@ -22,6 +22,8 @@ class StatusBadge extends StatelessWidget {
       case 'cancelled':
       case 'absent':
         return Colors.red.shade100;
+      case 'waitlisted':
+        return Colors.amber.shade100;
       default:
         return Colors.grey.shade200;
     }
@@ -40,6 +42,8 @@ class StatusBadge extends StatelessWidget {
       case 'cancelled':
       case 'absent':
         return Colors.red.shade800;
+      case 'waitlisted':
+        return Colors.amber.shade900;
       default:
         return Colors.grey.shade800;
     }

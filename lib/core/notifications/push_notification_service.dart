@@ -17,11 +17,36 @@ class PushNotificationService {
   static final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
 
-  static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
+  // قناة الرسائل العادية
+  static const AndroidNotificationChannel _messagesChannel =
+      AndroidNotificationChannel(
     'quran_messages_channel',
-    'Quran Messages',
-    description: 'Notifications for sessions and messages',
+    'رسائل القرآن',
+    description: 'إشعارات الرسائل',
     importance: Importance.max,
+  );
+
+  // قناة الجلسات الفردية — صوت الأذان (res/raw/athan.wav)
+  // معرّف جديد لأن Android لا يسمح بتغيير صوت قناة موجودة
+  static const AndroidNotificationChannel _individualSessionChannel =
+      AndroidNotificationChannel(
+    'quran_sessions_athan_channel',
+    'جلسات فردية',
+    description: 'تنبيهات بدء الجلسات الفردية',
+    importance: Importance.max,
+    sound: RawResourceAndroidNotificationSound('athan'),
+    playSound: true,
+  );
+
+  // قناة الجلسات الجماعية — صوت الأذان (نفس الصوت، قناة منفصلة للبيكند)
+  static const AndroidNotificationChannel _groupSessionChannel =
+      AndroidNotificationChannel(
+    'quran_group_sessions_athan_channel',
+    'جلسات جماعية',
+    description: 'تنبيهات بدء الجلسات الجماعية',
+    importance: Importance.max,
+    sound: RawResourceAndroidNotificationSound('athan'),
+    playSound: true,
   );
 
   static bool _initialized = false;
@@ -33,24 +58,38 @@ class PushNotificationService {
       if (Platform.isAndroid) {
         await _initLocalNotificationsForAndroid();
         await _requestPermission();
-        await _initFirebaseMessagingForAndroid();
-      } else if ((Platform.isIOS || Platform.isMacOS) &&
-          AppConfig.enablePushOnIOS) {
-        // سنفعلها لاحقًا عندما يكون حساب Apple جاهز
-      } else {
-        if (kDebugMode) {
-        debugPrint('Push notifications are disabled temporarily on iOS/macOS.');}
+      } else if (Platform.isIOS && AppConfig.enablePushOnIOS) {
+        await _requestPermission();
+        // يعرض الإشعار بالصوت حتى لو التطبيق مفتوح — iOS يتولى الأمر بدون flutter_local_notifications
+        await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
       }
+
+      // Firebase listeners تُسجَّل دائماً بغض النظر عن حالة الدخول
+      await _setupFirebaseListeners();
+
       _initialized = true;
     } catch (e) {
       if (kDebugMode) {
-      debugPrint('Push init error: $e');}
+        debugPrint('Push init error: $e');
+      }
+    }
+  }
+
+  // يُستدعى مباشرة بعد تسجيل الدخول لضمان وصول الـ token للسيرفر
+  static Future<void> registerTokenAfterLogin() async {
+    try {
+      await _tryRegisterToken();
+    } catch (e) {
+      if (kDebugMode) debugPrint('registerTokenAfterLogin error: $e');
     }
   }
 
   static Future<void> _initLocalNotificationsForAndroid() async {
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-
     const initSettings = InitializationSettings(android: androidInit);
 
     await _localNotifications.initialize(
@@ -58,7 +97,6 @@ class PushNotificationService {
       onDidReceiveNotificationResponse: (response) async {
         final payload = response.payload;
         if (payload == null || payload.isEmpty) return;
-
         _handleNotificationPayloadString(payload);
       },
     );
@@ -68,43 +106,66 @@ class PushNotificationService {
           AndroidFlutterLocalNotificationsPlugin
         >();
 
-    await androidPlugin?.createNotificationChannel(_channel);
+    await androidPlugin?.createNotificationChannel(_messagesChannel);
+    await androidPlugin?.createNotificationChannel(_individualSessionChannel);
+    await androidPlugin?.createNotificationChannel(_groupSessionChannel);
   }
 
-  static Future<void> _initFirebaseMessagingForAndroid() async {
-    final isLoggedIn = await SessionStorage.isLoggedIn();
-
-    if (!isLoggedIn) return; // 🔥 حماية مهمة جدًا
-
-    final token = await _messaging.getToken();
-
-    if (token != null && token.isNotEmpty) {
-      await _registerTokenToServer(token);
-    }
+  static Future<void> _setupFirebaseListeners() async {
+    await _tryRegisterToken();
 
     _messaging.onTokenRefresh.listen((token) async {
       final isLoggedIn = await SessionStorage.isLoggedIn();
-
-      if (!isLoggedIn) return; // 🔥 منع إعادة التسجيل
-
+      if (!isLoggedIn) return;
       await _registerTokenToServer(token);
     });
 
+    // إشعار مستقبَل والتطبيق مفتوح
     FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
-      await _showLocalNotification(
-        title: message.notification?.title ?? 'إشعار جديد',
-        body: message.notification?.body ?? '',
-        payload: jsonEncode(message.data),
-      );
+      if (Platform.isAndroid) {
+        // Android: نعرضه يدوياً عبر flutter_local_notifications بالقناة الصحيحة
+        final channelId = _resolveChannelId(message.data);
+        await _showLocalNotification(
+          title: message.notification?.title ?? 'إشعار جديد',
+          body: message.notification?.body ?? '',
+          payload: jsonEncode(message.data),
+          channelId: channelId,
+        );
+      }
+      // iOS: setForegroundNotificationPresentationOptions يتولى العرض تلقائياً
     });
 
+    // المستخدم يضغط على الإشعار والتطبيق في الخلفية
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       _handleNotificationData(message.data);
     });
 
+    // التطبيق مغلق تماماً والمستخدم يضغط على الإشعار
     final initialMessage = await _messaging.getInitialMessage();
     if (initialMessage != null) {
       _handleNotificationData(initialMessage.data);
+    }
+  }
+
+  // يحدد القناة المناسبة بناءً على type و session_type في الـ payload
+  static String _resolveChannelId(Map<String, dynamic> data) {
+    final type = data['type']?.toString();
+    if (type == 'session') {
+      final sessionType = data['session_type']?.toString();
+      return sessionType == 'group'
+          ? 'quran_group_sessions_athan_channel'
+          : 'quran_sessions_athan_channel';
+    }
+    return 'quran_messages_channel';
+  }
+
+  static Future<void> _tryRegisterToken() async {
+    final isLoggedIn = await SessionStorage.isLoggedIn();
+    if (!isLoggedIn) return;
+
+    final token = await _messaging.getToken();
+    if (token != null && token.isNotEmpty) {
+      await _registerTokenToServer(token);
     }
   }
 
@@ -112,17 +173,17 @@ class PushNotificationService {
     required String title,
     required String body,
     required String payload,
+    String channelId = 'quran_messages_channel',
   }) async {
-    const androidDetails = AndroidNotificationDetails(
-      'quran_messages_channel',
-      'Quran Messages',
-      channelDescription: 'Notifications for sessions and messages',
+    final androidDetails = AndroidNotificationDetails(
+      channelId,
+      _channelDisplayName(channelId),
       importance: Importance.max,
       priority: Priority.high,
       icon: '@mipmap/ic_launcher',
     );
 
-    const details = NotificationDetails(android: androidDetails);
+    final details = NotificationDetails(android: androidDetails);
 
     await _localNotifications.show(
       id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
@@ -131,6 +192,17 @@ class PushNotificationService {
       notificationDetails: details,
       payload: payload,
     );
+  }
+
+  static String _channelDisplayName(String channelId) {
+    switch (channelId) {
+      case 'quran_sessions_athan_channel':
+        return 'جلسات فردية';
+      case 'quran_group_sessions_athan_channel':
+        return 'جلسات جماعية';
+      default:
+        return 'رسائل القرآن';
+    }
   }
 
   static void _handleNotificationPayloadString(String payload) {
@@ -142,53 +214,59 @@ class PushNotificationService {
         _handleNotificationData(Map<String, dynamic>.from(decoded));
       }
     } catch (_) {
-      // fallback قديم لو كان payload مجرد "message" أو "session"
       _handleNotificationData({'type': payload, 'target_role': 'student'});
     }
   }
 
-static Future<void> _handleNotificationData(Map<String, dynamic> data) async {
-  // 🔴 تحقق من أن المستخدم ما زال مسجل دخول
-  final isLoggedIn = await SessionStorage.isLoggedIn();
-  if (!isLoggedIn) return;
+  static Future<void> _handleNotificationData(
+      Map<String, dynamic> data) async {
+    final isLoggedIn = await SessionStorage.isLoggedIn();
+    if (!isLoggedIn) return;
 
-  final type = data['type']?.toString();
-  final targetRole = data['target_role']?.toString();
+    final type = data['type']?.toString();
+    final targetRole = data['target_role']?.toString();
 
-  if (targetRole != 'student') return;
+    final navigator = NotificationNavigationService.navigatorKey.currentState;
+    if (navigator == null) return;
 
-  final navigator = NotificationNavigationService.navigatorKey.currentState;
-  if (navigator == null) return;
+    // ===== مشرف =====
+    if (targetRole == 'admin') {
+      if (type == 'message') NotificationNavigationService.openAdminMessages();
+      return;
+    }
 
-  if (type == 'message') {
-    final messageTitle = data['message_title']?.toString() ?? '';
-    final messageBody = data['message_body']?.toString() ?? '';
+    // ===== مقريء =====
+    if (targetRole == 'teacher') {
+      if (type == 'message') NotificationNavigationService.openTeacherMessages();
+      return;
+    }
 
-    navigator.pushNamedAndRemoveUntil('/student/messages', (route) => false);
+    // ===== طالب =====
+    if (targetRole != 'student') return;
 
-    Future.delayed(const Duration(milliseconds: 300), () {
-      NotificationNavigationService.navigatorKey.currentState?.pushNamed(
-        '/student/notification-message',
-        arguments: {
-          'titleText': messageTitle,
-          'bodyText': messageBody,
-        },
-      );
-    });
+    if (type == 'message') {
+      final messageTitle = data['message_title']?.toString() ?? '';
+      final messageBody = data['message_body']?.toString() ?? '';
 
-    return;
+      navigator.pushNamedAndRemoveUntil('/student/messages', (route) => false);
+
+      Future.delayed(const Duration(milliseconds: 300), () {
+        NotificationNavigationService.navigatorKey.currentState?.pushNamed(
+          '/student/notification-message',
+          arguments: {
+            'titleText': messageTitle,
+            'bodyText': messageBody,
+          },
+        );
+      });
+      return;
+    }
+
+    if (type == 'session') {
+      NotificationNavigationService.openStudentSessions();
+      navigator.pushNamedAndRemoveUntil('/student/sessions', (route) => false);
+    }
   }
-
-  if (type == 'session') {
-    // 🔴 تم إلغاء Jitsi بالكامل — نستخدم Agora فقط
-    NotificationNavigationService.openStudentSessions();
-
-    navigator.pushNamedAndRemoveUntil(
-      '/student/sessions',
-      (route) => false,
-    );
-  }
-}
 
   static Future<void> _requestPermission() async {
     await _messaging.requestPermission(
@@ -202,7 +280,6 @@ static Future<void> _handleNotificationData(Map<String, dynamic> data) async {
   static Future<void> _registerTokenToServer(String token) async {
     try {
       final isLoggedIn = await SessionStorage.isLoggedIn();
-
       if (!isLoggedIn) return;
 
       final dio = await ApiClient.getInstance();

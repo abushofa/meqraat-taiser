@@ -229,14 +229,117 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
     }
   }
 
+  String _arabicCount(int n, String singular, String dual, String plural) {
+    if (n == 1) return singular;
+    if (n == 2) return dual;
+    return '$n $plural';
+  }
+
+  String _formatRemaining(String? expectedDateStr) {
+    if (expectedDateStr == null) return '—';
+    final expected = DateTime.tryParse(expectedDateStr);
+    if (expected == null) return '—';
+    final diff = expected.difference(DateTime.now());
+    if (diff.isNegative) return 'قريباً';
+    final days = diff.inDays;
+    final months = days ~/ 30;
+    final weeks = (days % 30) ~/ 7;
+    final rem = (days % 30) % 7;
+    final parts = <String>[];
+    if (months > 0) parts.add(_arabicCount(months, 'شهر', 'شهران', 'شهور'));
+    if (weeks > 0) parts.add(_arabicCount(weeks, 'أسبوع', 'أسبوعان', 'أسابيع'));
+    if (rem > 0) parts.add(_arabicCount(rem, 'يوم', 'يومان', 'أيام'));
+    return parts.isEmpty ? 'قريباً' : parts.join(' و ');
+  }
+
+  Widget _buildWaitlistCard(Map<String, dynamic> student) {
+    final position = student['waitlist_position'];
+    final expectedDate = student['expected_start_date']?.toString();
+    final remaining = _formatRemaining(expectedDate);
+
+    return _DashboardCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: Colors.amber.shade100,
+                child: const Icon(Icons.hourglass_top, color: Colors.amber),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'قائمة الانتظار',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.amber.shade50,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.amber.shade200),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'أنت حالياً في قائمة الانتظار',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+                const SizedBox(height: 10),
+                if (position != null)
+                  _waitlistRow(
+                    Icons.format_list_numbered,
+                    'مركزك في القائمة:',
+                    '#$position',
+                  ),
+                if (expectedDate != null) ...[
+                  const SizedBox(height: 6),
+                  _waitlistRow(Icons.calendar_today, 'التاريخ المتوقع للانضمام:', expectedDate),
+                  const SizedBox(height: 6),
+                  _waitlistRow(Icons.timer_outlined, 'المدة المتبقية: ', remaining),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _waitlistRow(IconData icon, String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 16, color: Colors.amber.shade700),
+            const SizedBox(width: 6),
+            Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+          ],
+        ),
+        Text(value, style: const TextStyle(fontSize: 13)),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final student = _data?['student'];
+    final student = _data?['student'] as Map<String, dynamic>?;
     final teacher = _data?['teacher'];
     final stats = _data?['stats'];
     final lastSession = _data?['last_session'];
 
     final teacherName = teacher?['name'] ?? 'المُقرئ';
+    final studentStatus = student?['status']?.toString() ?? '';
+    final isWaitlisted = studentStatus == 'waitlisted';
 
     final session = _activeSession ?? lastSession;
     final agora = session?['agora'];
@@ -266,40 +369,45 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            _buildStudentHeader(student as Map<String, dynamic>?, _profileUser),
+            _buildStudentHeader(student, _profileUser),
             const SizedBox(height: 16),
-            _DashboardCard(
-              child: Column(
-                children: [
-                  const Text(
-                    'الجلسة الحالية',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 10),
-                  if (hasSession)
-                    ElevatedButton(
-                      onPressed: _joiningSession
-                          ? null
-                          : () => _joinCurrentSession(
-                              Map<String, dynamic>.from(session),
-                              teacherName,
-                            ),
-                      child: _joiningSession
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : Text(joinButtonText),
-                    )
-                  else
-                    const Text('لا توجد جلسة'),
-                ],
+            if (isWaitlisted)
+              _buildWaitlistCard(student!)
+            else
+              _DashboardCard(
+                child: Column(
+                  children: [
+                    const Text(
+                      'الجلسة الحالية',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 10),
+                    if (hasSession)
+                      ElevatedButton(
+                        onPressed: _joiningSession
+                            ? null
+                            : () => _joinCurrentSession(
+                                Map<String, dynamic>.from(session),
+                                teacherName,
+                              ),
+                        child: _joiningSession
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : Text(joinButtonText),
+                      )
+                    else
+                      const Text('لا توجد جلسة'),
+                  ],
+                ),
               ),
-            ),
             const SizedBox(height: 16),
-            _card('إجمالي الجلسات', '${stats?['total_sessions'] ?? 0}'),
-            _card('الدقائق', '${stats?['total_minutes'] ?? 0}'),
+            if (!isWaitlisted) ...[
+              _card('إجمالي الجلسات', '${stats?['total_sessions'] ?? 0}'),
+              _card('الدقائق', '${stats?['total_minutes'] ?? 0}'),
+            ],
           ],
         ),
       ),

@@ -33,7 +33,7 @@ class _StudentHomeShellState extends State<StudentHomeShell> {
   ];
 
   final List<String> _titles = const [
-    'الرئيسية',
+    'لوحة الطالب',
     'الجلسات',
     'الرسائل',
     'الملاحظات',

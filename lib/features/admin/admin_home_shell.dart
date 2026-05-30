@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/network/api_client.dart';
+import '../../core/notifications/notification_navigation_service.dart';
 import '../auth/login_screen.dart';
 
 import 'admin_dashboard_screen.dart';
@@ -11,7 +12,8 @@ import 'admin_pending_requests_screen.dart';
 import 'admin_assignments_screen.dart';
 import 'admin_manage_students_screen.dart';
 import 'admin_directory_screen.dart';
-import 'admin_deleted_users_screen.dart'; // 🔥 جديد
+import 'admin_deleted_users_screen.dart';
+import 'admin_messages_screen.dart';
 
 import '../profile/profile_screen.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -30,30 +32,46 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
 
   final List<Widget> _pages = const [
     AdminDashboardScreen(),
-    AdminReportsScreen(),
-    AdminSessionsScreen(),
     AdminPendingRequestsScreen(),
     AdminAssignmentsScreen(),
     AdminManageStudentsScreen(),
+    AdminMessagesScreen(),
+    AdminSessionsScreen(),
+    AdminReportsScreen(),
     AdminDirectoryScreen(),
-    AdminDeletedUsersScreen(), // 🔥 جديد
+    AdminDeletedUsersScreen(),
   ];
 
   final List<String> _titles = const [
     'لوحة المشرف',
-    'التقارير',
-    'الجلسات',
     'الطلبات',
     'الربط',
-    'إدارة الطلاب',
+    'الإدارة',
+    'الرسائل',
+    'الجلسات',
+    'التقارير',
     'الدليل',
-    'المحذوفون', // 🔥 جديد
+    'المحذوفون',
   ];
 
   @override
+  void initState() {
+    super.initState();
+    NotificationNavigationService.adminTabToOpen.addListener(_onTabRequested);
+  }
+
+  @override
   void dispose() {
+    NotificationNavigationService.adminTabToOpen.removeListener(_onTabRequested);
     _navScrollController.dispose();
     super.dispose();
+  }
+
+  void _onTabRequested() {
+    final tab = NotificationNavigationService.adminTabToOpen.value;
+    if (tab == null) return;
+    if (mounted) setState(() => _currentIndex = tab);
+    NotificationNavigationService.clearAdminTab();
   }
 
   Future<void> _logout() async {
@@ -196,46 +214,52 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
                   index: 0,
                 ),
                 _buildNavItem(
-                  icon: Icons.bar_chart_outlined,
-                  selectedIcon: Icons.bar_chart,
-                  label: 'التقارير',
-                  index: 1,
-                ),
-                _buildNavItem(
-                  icon: Icons.history_outlined,
-                  selectedIcon: Icons.history,
-                  label: 'الجلسات',
-                  index: 2,
-                ),
-                _buildNavItem(
                   icon: Icons.pending_actions_outlined,
                   selectedIcon: Icons.pending_actions,
                   label: 'الطلبات',
-                  index: 3,
+                  index: 1,
                 ),
                 _buildNavItem(
                   icon: Icons.link_outlined,
                   selectedIcon: Icons.link,
                   label: 'الربط',
-                  index: 4,
+                  index: 2,
                 ),
                 _buildNavItem(
                   icon: Icons.manage_accounts_outlined,
                   selectedIcon: Icons.manage_accounts,
                   label: 'الإدارة',
+                  index: 3,
+                ),
+                _buildNavItem(
+                  icon: Icons.mail_outlined,
+                  selectedIcon: Icons.mail,
+                  label: 'الرسائل',
+                  index: 4,
+                ),
+                _buildNavItem(
+                  icon: Icons.history_outlined,
+                  selectedIcon: Icons.history,
+                  label: 'الجلسات',
                   index: 5,
+                ),
+                _buildNavItem(
+                  icon: Icons.bar_chart_outlined,
+                  selectedIcon: Icons.bar_chart,
+                  label: 'التقارير',
+                  index: 6,
                 ),
                 _buildNavItem(
                   icon: Icons.menu_book_outlined,
                   selectedIcon: Icons.menu_book,
                   label: 'الدليل',
-                  index: 6,
+                  index: 7,
                 ),
                 _buildNavItem(
                   icon: Icons.delete_outline,
                   selectedIcon: Icons.delete,
                   label: 'المحذوفون',
-                  index: 7,
+                  index: 8,
                 ),
               ],
             ),

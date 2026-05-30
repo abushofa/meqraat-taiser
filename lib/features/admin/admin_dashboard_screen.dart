@@ -466,7 +466,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
     final stats = _data?['stats'] as Map<String, dynamic>?;
     final topTeachers = (_data?['top_teachers'] as List?) ?? [];
-     final pendingStudents = (_data?['pending_students'] as List? ?? [])
+    final pendingStudents = (_data?['pending_students'] as List? ?? [])
         .map((e) => Map<String, dynamic>.from(e))
         .toList();
     final pendingTeachers = (_data?['pending_teachers'] as List? ?? [])
@@ -474,6 +474,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         .toList();
     final unassignedStudents =
         (_data?['approved_students_unassigned'] as List?) ?? [];
+    final teacherRequests = (_data?['teacher_requests'] as List? ?? [])
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
     return Scaffold(
       backgroundColor: const Color(0xFFF6F8FB),
       body: RefreshIndicator(
@@ -578,6 +581,28 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 );
               },
             ),
+            const SizedBox(height: 16),
+            _buildSimpleSection(
+              title: 'طلبات المُقرئين للمشرف',
+              icon: Icons.mark_email_unread_outlined,
+              items: teacherRequests,
+              emptyText: 'لا توجد طلبات',
+              itemBuilder: (item) {
+                final m = item as Map;
+                return _InfoListCard(
+                  title: '${m['title'] ?? '—'}',
+                  subtitle: _buildSubtitle([
+                    'من: ${m['sender_name'] ?? '—'}',
+                    '${m['created_at'] ?? ''}',
+                    '',
+                    '${m['body'] ?? ''}',
+                  ]),
+                  icon: Icons.mail_outline,
+                  color: const Color(0xFFFFF8E1),
+                  iconColor: Colors.amber,
+                );
+              },
+            ),
           ],
         ),
       ),
@@ -634,6 +659,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         Icons.groups_outlined,
         const Color(0xFFF3E8FF),
         Colors.deepPurple,
+      ),
+      _statCard(
+        'قائمة الانتظار',
+        '${stats?['waitlisted_students_count'] ?? 0}',
+        Icons.hourglass_top_outlined,
+        const Color(0xFFFFF8E1),
+        Colors.amber,
       ),
       _statCard(
         'الجلسات النشطة',

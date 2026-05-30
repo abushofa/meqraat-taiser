@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:quran_app/core/storage/session_storage.dart';
 
 import '../../core/network/api_client.dart';
+import '../../core/notifications/notification_navigation_service.dart';
 import '../auth/login_screen.dart';
 
 import 'teacher_dashboard_screen.dart';
@@ -35,6 +36,25 @@ class _TeacherHomeShellState extends State<TeacherHomeShell> {
     'الجلسات',
     'الرسائل',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    NotificationNavigationService.teacherTabToOpen.addListener(_onTabRequested);
+  }
+
+  @override
+  void dispose() {
+    NotificationNavigationService.teacherTabToOpen.removeListener(_onTabRequested);
+    super.dispose();
+  }
+
+  void _onTabRequested() {
+    final tab = NotificationNavigationService.teacherTabToOpen.value;
+    if (tab == null) return;
+    if (mounted) setState(() => _currentIndex = tab);
+    NotificationNavigationService.clearTeacherTab();
+  }
 
   bool _isSmallScreen(BuildContext context) {
     return MediaQuery.of(context).size.width < 390;

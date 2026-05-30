@@ -90,20 +90,44 @@ class _AdminPendingRequestsScreenState
     }
   }
 
-  Future<void> _updateStudentStatus(int studentId, String action) async {
+  Future<void> _updateStudentStatus(int studentId, String action,
+      {int waitMonths = 0, int waitWeeks = 0, int waitDays = 0}) async {
     final isApprove = action == 'approve';
+    final isWaitlist = action == 'waitlist';
 
     final confirmed = await AppDialogs.showConfirm(
       context: context,
-      title: isApprove ? 'اعتماد الطالب' : 'رفض الطالب',
+      title: isApprove
+          ? 'اعتماد الطالب'
+          : isWaitlist
+              ? 'وضع الطالب في قائمة الانتظار'
+              : 'رفض الطالب',
       message: isApprove
           ? 'هل تريد اعتماد هذا الطالب؟'
-          : 'هل تريد رفض هذا الطالب؟',
-      confirmText: isApprove ? 'اعتماد' : 'رفض',
+          : isWaitlist
+              ? 'هل تريد وضع الطالب في قائمة الانتظار؟'
+              : 'هل تريد رفض هذا الطالب؟',
+      confirmText: isApprove
+          ? 'اعتماد'
+          : isWaitlist
+              ? 'تأكيد'
+              : 'رفض',
       cancelText: 'إلغاء',
-      confirmColor: isApprove ? null : Colors.red,
-      icon: isApprove ? Icons.verified_outlined : Icons.block_outlined,
-      iconColor: isApprove ? Colors.green : Colors.red,
+      confirmColor: isApprove
+          ? null
+          : isWaitlist
+              ? Colors.amber.shade700
+              : Colors.red,
+      icon: isApprove
+          ? Icons.verified_outlined
+          : isWaitlist
+              ? Icons.hourglass_top
+              : Icons.block_outlined,
+      iconColor: isApprove
+          ? Colors.green
+          : isWaitlist
+              ? Colors.amber
+              : Colors.red,
     );
 
     if (!confirmed || !mounted) return;
@@ -111,11 +135,17 @@ class _AdminPendingRequestsScreenState
     try {
       final dio = await ApiClient.getInstance();
 
-      final response = await dio.post(
-        '/admin/student_status.php',
-        data: {'student_id': studentId, 'action': action},
-      );
+      final data = <String, dynamic>{
+        'student_id': studentId,
+        'action': action,
+      };
+      if (isWaitlist) {
+        data['wait_months'] = waitMonths;
+        data['wait_weeks']  = waitWeeks;
+        data['wait_days']   = waitDays;
+      }
 
+      final response = await dio.post('/admin/student_status.php', data: data);
       final body = response.data;
 
       if (body is Map && body['ok'] == true) {
@@ -127,7 +157,6 @@ class _AdminPendingRequestsScreenState
       }
 
       String message = 'تعذر تحديث حالة الطالب';
-
       if (body is Map) {
         message = body['message']?.toString() ?? message;
       } else if (body is String && body.trim().isNotEmpty) {
@@ -135,7 +164,6 @@ class _AdminPendingRequestsScreenState
       }
 
       if (!mounted) return;
-
       await AppDialogs.showInfo(
         context: context,
         title: 'تعذر التحديث',
@@ -145,9 +173,7 @@ class _AdminPendingRequestsScreenState
       );
     } on DioException catch (e) {
       String message = 'فشل الاتصال بالخادم';
-
       final data = e.response?.data;
-
       if (data is Map) {
         message = data['message']?.toString() ?? message;
       } else if (data is String && data.trim().isNotEmpty) {
@@ -155,9 +181,7 @@ class _AdminPendingRequestsScreenState
       } else if (e.response?.statusCode != null) {
         message = 'خطأ من الخادم: ${e.response!.statusCode}';
       }
-
       if (!mounted) return;
-
       await AppDialogs.showInfo(
         context: context,
         title: 'فشل الاتصال',
@@ -167,7 +191,6 @@ class _AdminPendingRequestsScreenState
       );
     } catch (_) {
       if (!mounted) return;
-
       await AppDialogs.showInfo(
         context: context,
         title: 'خطأ',
@@ -176,6 +199,102 @@ class _AdminPendingRequestsScreenState
         iconColor: Colors.red,
       );
     }
+  }
+
+  Future<void> _showWaitlistDialog(int studentId) async {
+    int months = 0, weeks = 0, days = 0;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) {
+          final total = months * 30 + weeks * 7 + days;
+          final preview = total > 0
+              ? DateTime.now().add(Duration(days: total))
+              : null;
+          final previewStr = preview != null
+              ? '${preview.year}-${preview.month.toString().padLeft(2, '0')}-${preview.day.toString().padLeft(2, '0')}'
+              : '—';
+
+          return AlertDialog(
+            title: const Text('مدة الانتظار'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _durationRow('شهور', months, (v) => setS(() => months = v)),
+                const SizedBox(height: 8),
+                _durationRow('أسابيع', weeks, (v) => setS(() => weeks = v)),
+                const SizedBox(height: 8),
+                _durationRow('أيام', days, (v) => setS(() => days = v)),
+                const SizedBox(height: 16),
+                Text(
+                  'التاريخ المتوقع: $previewStr',
+                  style: TextStyle(
+                    color: Colors.amber.shade800,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('إلغاء'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.amber.shade700),
+                onPressed: total > 0 ? () => Navigator.pop(ctx, true) : null,
+                child: const Text('تأكيد'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await _updateStudentStatus(
+        studentId,
+        'waitlist',
+        waitMonths: months,
+        waitWeeks: weeks,
+        waitDays: days,
+      );
+    }
+  }
+
+  Widget _durationRow(String label, int value, ValueChanged<int> onChanged) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 60,
+          child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
+        ),
+        IconButton(
+          icon: const Icon(Icons.remove_circle_outline),
+          onPressed: value > 0 ? () => onChanged(value - 1) : null,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+        ),
+        const SizedBox(width: 4),
+        SizedBox(
+          width: 32,
+          child: Text(
+            '$value',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+        ),
+        const SizedBox(width: 4),
+        IconButton(
+          icon: const Icon(Icons.add_circle_outline),
+          onPressed: () => onChanged(value + 1),
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+        ),
+      ],
+    );
   }
 
   Future<void> _updateTeacherStatus(int teacherId, String action) async {
@@ -269,6 +388,7 @@ class _AdminPendingRequestsScreenState
   Widget _actionButtons({
     required VoidCallback onApprove,
     required VoidCallback onReject,
+    VoidCallback? onWaitlist,
   }) {
     return Row(
       children: [
@@ -278,7 +398,17 @@ class _AdminPendingRequestsScreenState
             child: const Text('اعتماد'),
           ),
         ),
-        const SizedBox(width: 8),
+        if (onWaitlist != null) ...[
+          const SizedBox(width: 6),
+          Expanded(
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade700),
+              onPressed: onWaitlist,
+              child: const Text('انتظار', style: TextStyle(color: Colors.white)),
+            ),
+          ),
+        ],
+        const SizedBox(width: 6),
         Expanded(
           child: ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
@@ -315,6 +445,8 @@ class _AdminPendingRequestsScreenState
             _actionButtons(
               onApprove: () =>
                   _updateStudentStatus(item['student_id'] as int, 'approve'),
+              onWaitlist: () =>
+                  _showWaitlistDialog(item['student_id'] as int),
               onReject: () =>
                   _updateStudentStatus(item['student_id'] as int, 'reject'),
             ),

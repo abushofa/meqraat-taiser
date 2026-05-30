@@ -38,6 +38,7 @@ class AgoraCallScreen extends StatefulWidget {
   final String title;
   final String displayName;
   final bool isTeacher;
+  final bool isGroupSession;
   final Future<void> Function()? onEndSession;
   final int? sessionId;
 
@@ -50,6 +51,7 @@ class AgoraCallScreen extends StatefulWidget {
     required this.title,
     required this.displayName,
     this.isTeacher = false,
+    this.isGroupSession = false,
     this.onEndSession,
     this.sessionId,
   });
@@ -75,6 +77,10 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
 
   bool _isRecording = false;
   String? _lastRecordingPath;
+
+  // قائمة المشاركين — للمقريء في الجلسة الجماعية فقط
+  final Map<int, String> _activeParticipants = {};
+  final List<String> _leftParticipants = [];
 
   int? _remoteUid;
   bool _remoteVideoEnabled = false;
@@ -359,16 +365,25 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
               _remoteUid = remoteUid;
               _connectionStatus = 'الجلسة متصلة';
             });
+            if (widget.isTeacher && widget.isGroupSession) {
+              _fetchParticipantName(remoteUid);
+            }
           },
           onUserOffline: (connection, remoteUid, reason) {
             if (!mounted) return;
+            if (widget.isTeacher && widget.isGroupSession) {
+              final name = _activeParticipants.remove(remoteUid);
+              if (name != null) _leftParticipants.add(name);
+            }
             setState(() {
               if (_remoteUid == remoteUid) {
                 _remoteUid = null;
                 _remoteVideoEnabled = false;
                 _isRemoteSpeaking = false;
               }
-              _connectionStatus = 'خرج الطرف الآخر من الجلسة';
+              _connectionStatus = widget.isGroupSession
+                  ? 'جلسة جماعية نشطة'
+                  : 'خرج الطرف الآخر من الجلسة';
             });
             _remoteSpeakingResetTimer?.cancel();
             _updatePulseAnimation();
@@ -494,15 +509,30 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
 
   static final _mediaScanner = const MethodChannel('com.abushofa.quran_app/media_scanner');
 
+  Future<void> _fetchParticipantName(int uid) async {
+    if (widget.sessionId == null) return;
+    try {
+      final dio = await ApiClient.getInstance();
+      final response = await dio.get(
+        '/session/participant_name.php',
+        queryParameters: {'session_id': widget.sessionId, 'agora_uid': uid},
+      );
+      final name = response.data?['data']?['name']?.toString();
+      if (name != null && mounted) {
+        setState(() => _activeParticipants[uid] = name);
+      }
+    } catch (_) {}
+  }
 
   Future<String> _getRecordingPath() async {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final fileName = 'session_$timestamp.aac';
 
     if (Platform.isAndroid) {
-      // Record to temp cache; after stopping we move to Downloads via MediaStore
-      // so files are visible on Xiaomi/Huawei without MANAGE_ALL_FILES permission.
-      final dir = await getTemporaryDirectory();
+      // External app-specific dir: Agora's native SDK writes here reliably on MIUI/EMUI tablets.
+      // No WRITE_EXTERNAL_STORAGE needed (app-specific path).
+      final externalDir = await getExternalStorageDirectory();
+      final dir = externalDir ?? await getTemporaryDirectory();
       return '${dir.path}/$fileName';
     } else {
       // .aac is the Agora-documented encoded format; .m4a is not recognized.
@@ -550,13 +580,13 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
       await _engine.stopAudioRecording();
       debugPrint('Agora recording stopped');
 
+      var savedOk = false;
+
       if (_lastRecordingPath != null) {
         final file = File(_lastRecordingPath!);
         if (await file.exists()) {
-          final size = await file.length();
-          debugPrint('File size: $size bytes');
+          debugPrint('File size: ${await file.length()} bytes');
           if (Platform.isAndroid) {
-            // Move temp file to public Downloads via MediaStore (works on Xiaomi/Huawei).
             final fileName = _lastRecordingPath!.split('/').last;
             try {
               await _mediaScanner.invokeMethod('saveToDownloads', {
@@ -564,12 +594,15 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
                 'fileName': fileName,
               });
               debugPrint('Saved to Downloads: $fileName');
+              savedOk = true;
             } catch (e) {
               debugPrint('saveToDownloads error: $e');
             }
+          } else {
+            savedOk = true;
           }
         } else {
-          debugPrint('File does not exist!');
+          debugPrint('Recording file not found: $_lastRecordingPath');
         }
       }
 
@@ -579,12 +612,14 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            Platform.isIOS
-                ? 'تم حفظ التسجيل في تطبيق الملفات ✅'
-                : 'تم حفظ التسجيل في مجلد التنزيلات ✅',
+            savedOk
+                ? (Platform.isIOS
+                    ? 'تم حفظ التسجيل في تطبيق الملفات ✅'
+                    : 'تم حفظ التسجيل في مجلد التنزيلات ✅')
+                : 'تعذر حفظ التسجيل، يرجى المحاولة مرة أخرى',
           ),
-          backgroundColor: Colors.green.shade700,
-          duration: const Duration(seconds: 3),
+          backgroundColor: savedOk ? Colors.green.shade700 : Colors.red.shade700,
+          duration: const Duration(seconds: 4),
         ),
       );
     } catch (e) {
@@ -978,6 +1013,12 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
                     height: 186,
                     child: _buildLocalPreview(),
                   ),
+                  if (widget.isTeacher && widget.isGroupSession)
+                    Positioned(
+                      top: 16,
+                      right: 16,
+                      child: _buildParticipantsPanel(),
+                    ),
                 ],
               ),
             if (_ending)
@@ -1028,6 +1069,69 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildParticipantsPanel() {
+    if (_activeParticipants.isEmpty && _leftParticipants.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 170),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.72),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_activeParticipants.isNotEmpty) ...[
+            const Text('في الجلسة',
+                style: TextStyle(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            ..._activeParticipants.values.map((name) => _ParticipantRow(name: name, active: true)),
+          ],
+          if (_leftParticipants.isNotEmpty) ...[
+            if (_activeParticipants.isNotEmpty) const SizedBox(height: 8),
+            const Text('غادر',
+                style: TextStyle(color: Colors.orangeAccent, fontSize: 11, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            ..._leftParticipants.map((name) => _ParticipantRow(name: name, active: false)),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ParticipantRow extends StatelessWidget {
+  final String name;
+  final bool active;
+  const _ParticipantRow({required this.name, required this.active});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 3),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.circle, size: 7, color: active ? Colors.greenAccent : Colors.orangeAccent),
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(
+              name,
+              style: TextStyle(
+                color: active ? Colors.white : Colors.white54,
+                fontSize: 12,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       ),
     );
   }
