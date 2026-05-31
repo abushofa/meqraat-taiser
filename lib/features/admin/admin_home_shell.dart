@@ -14,6 +14,7 @@ import 'admin_manage_students_screen.dart';
 import 'admin_directory_screen.dart';
 import 'admin_deleted_users_screen.dart';
 import 'admin_messages_screen.dart';
+import 'admin_settings_screen.dart';
 
 import '../profile/profile_screen.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -109,6 +110,11 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => const ProfileScreen()),
+      );
+    } else if (value == 'settings') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const AdminSettingsScreen()),
       );
     }
   }
@@ -287,6 +293,16 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
                     Icon(Icons.person_outline),
                     SizedBox(width: 10),
                     Text('الحساب'),
+                  ],
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: 'settings',
+                child: Row(
+                  children: [
+                    Icon(Icons.settings_outlined),
+                    SizedBox(width: 10),
+                    Text('الإعدادات'),
                   ],
                 ),
               ),

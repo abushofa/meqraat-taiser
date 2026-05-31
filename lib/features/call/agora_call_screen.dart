@@ -313,10 +313,12 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
       await session.setActive(true);
       await Future.delayed(const Duration(milliseconds: 500));
 
+      final tempDir = await getTemporaryDirectory();
       await _engine.initialize(
         RtcEngineContext(
           appId: appId,
           channelProfile: ChannelProfileType.channelProfileLiveBroadcasting,
+          logConfig: LogConfig(filePath: '${tempDir.path}/agora.log'),
         ),
       );
 
@@ -526,18 +528,14 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
 
   Future<String> _getRecordingPath() async {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final fileName = 'session_$timestamp.aac';
 
     if (Platform.isAndroid) {
-      // External app-specific dir: Agora's native SDK writes here reliably on MIUI/EMUI tablets.
-      // No WRITE_EXTERNAL_STORAGE needed (app-specific path).
       final externalDir = await getExternalStorageDirectory();
       final dir = externalDir ?? await getTemporaryDirectory();
-      return '${dir.path}/$fileName';
+      return '${dir.path}/session_$timestamp.aac';
     } else {
-      // .aac is the Agora-documented encoded format; .m4a is not recognized.
       final dir = await getApplicationDocumentsDirectory();
-      return '${dir.path}/$fileName';
+      return '${dir.path}/session_$timestamp.aac';
     }
   }
 
@@ -1081,7 +1079,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
       constraints: const BoxConstraints(maxWidth: 170),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.72),
+        color: Colors.black.withValues(alpha: 0.72),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(

@@ -1,7 +1,10 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../../core/network/api_client.dart';
+import '../../core/services/app_settings_service.dart';
 import '../../core/utils/app_labels.dart';
+import '../../core/widgets/password_strength_indicator.dart';
+import 'verify_email_screen.dart';
 
 class TeacherRegisterScreen extends StatefulWidget {
   const TeacherRegisterScreen({super.key});
@@ -27,8 +30,18 @@ class _TeacherRegisterScreenState extends State<TeacherRegisterScreen> {
   bool _allQiraat = false;
 
   bool _loading = false;
+  String _passwordText = '';
   String? _error;
   String? _success;
+
+  @override
+  void initState() {
+    super.initState();
+    AppSettingsService.load();
+    _passwordController.addListener(() {
+      setState(() => _passwordText = _passwordController.text);
+    });
+  }
 
   Future<void> _handleSuccessAndBack(String message) async {
     setState(() {
@@ -123,9 +136,23 @@ class _TeacherRegisterScreenState extends State<TeacherRegisterScreen> {
       if (body is Map && body['ok'] == true) {
         if (!mounted) return;
 
+        final data = body['data'] as Map? ?? {};
+        if (data['needs_verification'] == true) {
+          final userId = data['user_id'] as int? ?? 0;
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => VerifyEmailScreen(
+                userId: userId,
+                email: _emailController.text.trim(),
+                name: _nameController.text.trim(),
+              ),
+            ),
+          );
+          return;
+        }
+
         final successMessage =
             body['message']?.toString() ?? 'تم إرسال طلب تسجيل المُقرئ بنجاح';
-
         await _handleSuccessAndBack(successMessage);
       } else {
         setState(() {
@@ -271,15 +298,20 @@ class _TeacherRegisterScreenState extends State<TeacherRegisterScreen> {
                         obscureText: true,
                         decoration: _inputDecoration('كلمة المرور'),
                         validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'أدخل كلمة المرور';
-                          }
-                          if (value.length < 6) {
-                            return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
+                          if (value == null || value.isEmpty) return 'أدخل كلمة المرور';
+                          if (AppSettingsService.strongPasswordEnabled) {
+                            if (value.length < 8) return 'كلمة المرور يجب أن تكون 8 أحرف على الأقل';
+                            if (!value.contains(RegExp(r'[A-Z]'))) return 'أضف حرفاً كبيراً (A-Z)';
+                            if (!value.contains(RegExp(r'[a-z]'))) return 'أضف حرفاً صغيراً (a-z)';
+                            if (!value.contains(RegExp(r'[0-9]'))) return 'أضف رقماً (0-9)';
+                          } else {
+                            if (value.length < 6) return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
                           }
                           return null;
                         },
                       ),
+                      if (AppSettingsService.strongPasswordEnabled)
+                        PasswordStrengthIndicator(password: _passwordText),
                       const SizedBox(height: 12),
                       TextFormField(
                         controller: _confirmPasswordController,
