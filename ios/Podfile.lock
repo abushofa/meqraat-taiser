@@ -47,6 +47,8 @@ PODS:
   - AgoraRtcEngine_iOS/VQA (4.5.2)
   - audio_session (0.0.1):
     - Flutter
+  - device_info_plus (0.0.1):
+    - Flutter
   - Firebase/CoreOnly (12.9.0):
     - FirebaseCore (~> 12.9.0)
   - Firebase/Messaging (12.9.0):
@@ -135,6 +137,7 @@ PODS:
 DEPENDENCIES:
   - agora_rtc_engine (from `.symlinks/plugins/agora_rtc_engine/ios`)
   - audio_session (from `.symlinks/plugins/audio_session/ios`)
+  - device_info_plus (from `.symlinks/plugins/device_info_plus/ios`)
   - firebase_core (from `.symlinks/plugins/firebase_core/ios`)
   - firebase_messaging (from `.symlinks/plugins/firebase_messaging/ios`)
   - Flutter (from `Flutter`)
@@ -167,6 +170,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/agora_rtc_engine/ios"
   audio_session:
     :path: ".symlinks/plugins/audio_session/ios"
+  device_info_plus:
+    :path: ".symlinks/plugins/device_info_plus/ios"
   firebase_core:
     :path: ".symlinks/plugins/firebase_core/ios"
   firebase_messaging:
@@ -196,6 +201,7 @@ SPEC CHECKSUMS:
   AgoraIrisRTC_iOS: eab58c126439adf5ec99632828a558ea216860da
   AgoraRtcEngine_iOS: 97e2398a2addda9057815a2a583a658e36796ff6
   audio_session: 9bb7f6c970f21241b19f5a3658097ae459681ba0
+  device_info_plus: 21fcca2080fbcd348be798aa36c3e5ed849eefbe
   Firebase: 065f2bb395062046623036d8e6dc857bc2521d56
   firebase_core: 8e6f58412ca227827c366b92e7cee047a2148c60
   firebase_messaging: c3aa897e0d40109cfb7927c40dc0dea799863f3b
