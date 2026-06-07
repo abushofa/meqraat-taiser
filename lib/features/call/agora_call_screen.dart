@@ -94,6 +94,8 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
   Timer? _sessionTimer;
   int _sessionSeconds = 0;
 
+  StreamSubscription? _audioInterruptionSubscription;
+
   Timer? _remoteSpeakingResetTimer;
   Timer? _localSpeakingResetTimer;
   Timer? _pingTimer;
@@ -105,7 +107,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    if (widget.isTeacher) _initForegroundService();
+    if (Platform.isAndroid) _initForegroundService();
 
     _pulseController = AnimationController(
       vsync: this,
@@ -313,6 +315,18 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
       await session.setActive(true);
       await Future.delayed(const Duration(milliseconds: 500));
 
+      // iOS: استعادة الصوت بعد أي انقطاع (إشعارات، مكالمات، إلخ)
+      if (Platform.isIOS) {
+        _audioInterruptionSubscription = session.interruptionEventStream.listen((event) async {
+          if (event.begin) return;
+          await Future.delayed(const Duration(milliseconds: 400));
+          if (!mounted || !_engineReady) return;
+          await session.setActive(true);
+          await _engine.enableAudio();
+          await _setSpeakerOn();
+        });
+      }
+
       final tempDir = await getTemporaryDirectory();
       await _engine.initialize(
         RtcEngineContext(
@@ -348,6 +362,8 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
           },
           onUserJoined: (connection, remoteUid, elapsed) async {
             if (!mounted) return;
+            // ضمان تفعيل استقبال صوت الطرف الآخر صراحةً
+            await _engine.muteRemoteAudioStream(uid: remoteUid, mute: false);
             await _setSpeakerOn();
             if (Platform.isIOS) {
               await Future.delayed(const Duration(milliseconds: 500));
@@ -361,6 +377,16 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
                   await audioSession.setActive(true);
                 } catch (_) {}
                 await _setSpeakerOn();
+              });
+            }
+            // Android: ضمانة ثانية بعد ثانيتين لفك الكتم في حال تأخر Agora في إعداد الصوت
+            if (Platform.isAndroid) {
+              Future.delayed(const Duration(seconds: 2), () async {
+                if (!mounted || !_engineReady) return;
+                try {
+                  await _engine.muteRemoteAudioStream(uid: remoteUid, mute: false);
+                  await _setSpeakerOn();
+                } catch (_) {}
               });
             }
             setState(() {
@@ -493,6 +519,8 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
 
       await Future.delayed(const Duration(milliseconds: 300));
       await _setSpeakerOn();
+      // فك كتم جميع الأصوات القادمة صراحةً بعد الانضمام
+      await _engine.muteAllRemoteAudioStreams(false);
       if (Platform.isIOS) {
         // Re-activate after joinChannel because Agora may reconfigure the session internally.
         await Future.delayed(const Duration(milliseconds: 800));
@@ -746,7 +774,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
       }
       if (_engineCreated) await _engine.leaveChannel();
       if (_engineCreated) await _engine.release();
-      if (widget.isTeacher) await FlutterForegroundTask.stopService();
+      if (Platform.isAndroid) await FlutterForegroundTask.stopService();
     } catch (e) {
       debugPrint("LEAVE ERROR: $e");
     }
@@ -914,6 +942,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
     _remoteSpeakingResetTimer?.cancel();
     _localSpeakingResetTimer?.cancel();
     _xiaomiAudioTimer?.cancel();
+    _audioInterruptionSubscription?.cancel();
     _pulseController.dispose();
     if (_engineCreated) _engine.release();
     _pingTimer?.cancel();
@@ -923,18 +952,44 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _isXiaomi && _engineReady) {
-      // MIUI may have suspended the audio thread while in background.
-      _engine.enableAudio();
-      _setSpeakerOn();
-    }
-    if (!widget.isTeacher) return;
-    if (state == AppLifecycleState.paused) {
+    if (state == AppLifecycleState.paused && _engineReady) {
+      // الحفاظ على الصوت لكلا الطرفين عند ذهاب التطبيق للخلفية أو إطفاء الشاشة
       _engine.setEnableSpeakerphone(_speakerEnabled);
-      debugPrint("Teacher went to background - session continues");
-    } else if (state == AppLifecycleState.resumed) {
+      debugPrint("App paused (screen off / background) - audio continues via foreground service");
+    } else if (state == AppLifecycleState.resumed && _engineReady) {
       _engine.setEnableSpeakerphone(_speakerEnabled);
-      debugPrint("Teacher resumed");
+      debugPrint("App resumed");
+
+      if (_isXiaomi) {
+        _engine.enableAudio();
+        _setSpeakerOn();
+      }
+
+      if (Platform.isIOS && _joined) {
+        Future.delayed(const Duration(milliseconds: 600), () async {
+          if (!mounted || !_engineReady) return;
+          final audioSession = await AudioSession.instance;
+          await audioSession.setActive(true);
+          await _engine.enableAudio();
+          await _setSpeakerOn();
+          if (_remoteUid != null) {
+            await _engine.muteRemoteAudioStream(uid: _remoteUid!, mute: false);
+          }
+        });
+      }
+
+      // Android: استعادة شاملة للصوت عند العودة من الخلفية لكلا الطرفين
+      if (Platform.isAndroid && _joined) {
+        Future.delayed(const Duration(milliseconds: 500), () async {
+          if (!mounted || !_engineReady) return;
+          await _engine.enableAudio();
+          await _setSpeakerOn();
+          await _engine.muteAllRemoteAudioStreams(false);
+          if (_remoteUid != null) {
+            await _engine.muteRemoteAudioStream(uid: _remoteUid!, mute: false);
+          }
+        });
+      }
     }
   }
 

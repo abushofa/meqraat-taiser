@@ -4,6 +4,7 @@ import '../../core/network/api_client.dart';
 import '../../core/services/app_settings_service.dart';
 import '../../core/utils/app_labels.dart';
 import '../../core/widgets/password_strength_indicator.dart';
+import '../../core/widgets/day_picker_widget.dart';
 import 'verify_email_screen.dart';
 
 class StudentRegisterScreen extends StatefulWidget {
@@ -27,6 +28,8 @@ class _StudentRegisterScreenState extends State<StudentRegisterScreen> {
   String _level = 'beginner';
   String _readingType = 'hafs_an_asim';
   String _preferredPeriod = 'after_asr';
+  List<String> _preferredDays = [];
+  bool _daysError = false;
 
   bool _loading = false;
   String _passwordText = '';
@@ -56,10 +59,16 @@ class _StudentRegisterScreenState extends State<StudentRegisterScreen> {
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
 
+    if (_preferredDays.isEmpty) {
+      setState(() => _daysError = true);
+      return;
+    }
+
     setState(() {
       _loading = true;
       _error = null;
       _success = null;
+      _daysError = false;
     });
 
     try {
@@ -78,6 +87,7 @@ class _StudentRegisterScreenState extends State<StudentRegisterScreen> {
           'level': _level,
           'reading_type': _readingType,
           'preferred_period': _preferredPeriod,
+          'preferred_days': _preferredDays.join(','),
         },
       );
 
@@ -390,6 +400,41 @@ class _StudentRegisterScreenState extends State<StudentRegisterScreen> {
                           }
                         },
                       ),
+                      const SizedBox(height: 16),
+
+                      // اختيار أيام الجلسات
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: _daysError
+                                ? Colors.red.shade400
+                                : Colors.grey.shade400,
+                          ),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: DayPickerWidget(
+                          selectedDays: _preferredDays,
+                          maxDays: AppSettingsService.maxSessionDays,
+                          onChanged: (days) =>
+                              setState(() {
+                                _preferredDays = days;
+                                if (days.isNotEmpty) _daysError = false;
+                              }),
+                        ),
+                      ),
+                      if (_daysError)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6, right: 12),
+                          child: Text(
+                            'اختر يوماً واحداً على الأقل',
+                            style: TextStyle(
+                              color: Colors.red.shade700,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
                       const SizedBox(height: 16),
 
                       if (_error != null)

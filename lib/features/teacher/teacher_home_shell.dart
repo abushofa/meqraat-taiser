@@ -4,14 +4,17 @@ import 'package:quran_app/core/storage/session_storage.dart';
 
 import '../../core/network/api_client.dart';
 import '../../core/notifications/notification_navigation_service.dart';
+import '../about/about_screen.dart';
+import '../about/help_screen.dart';
 import '../auth/login_screen.dart';
+import '../profile/profile_screen.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 import 'teacher_dashboard_screen.dart';
 import 'teacher_students_screen.dart';
-import 'teacher_sessions_screen.dart';
 import 'teacher_messages_screen.dart';
-import '../profile/profile_screen.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
+import 'teacher_sessions_screen.dart';
+import 'teacher_schedule_screen.dart';
 
 class TeacherHomeShell extends StatefulWidget {
   const TeacherHomeShell({super.key});
@@ -23,18 +26,21 @@ class TeacherHomeShell extends StatefulWidget {
 class _TeacherHomeShellState extends State<TeacherHomeShell> {
   int _currentIndex = 0;
 
+  // الترتيب: الرئيسية | الطلاب | الرسائل | الجلسات | الجدول
   final List<Widget> _pages = const [
     TeacherDashboardScreen(),
     TeacherStudentsScreen(),
-    TeacherSessionsScreen(),
     TeacherMessagesScreen(),
+    TeacherSessionsScreen(),
+    TeacherScheduleScreen(),
   ];
 
   final List<String> _titles = const [
     'لوحة المُقرئ',
     'الطلاب',
-    'الجلسات',
     'الرسائل',
+    'الجلسات',
+    'الجدول الأسبوعي',
   ];
 
   @override
@@ -45,43 +51,35 @@ class _TeacherHomeShellState extends State<TeacherHomeShell> {
 
   @override
   void dispose() {
-    NotificationNavigationService.teacherTabToOpen.removeListener(_onTabRequested);
+    NotificationNavigationService.teacherTabToOpen
+        .removeListener(_onTabRequested);
     super.dispose();
   }
 
   void _onTabRequested() {
     final tab = NotificationNavigationService.teacherTabToOpen.value;
     if (tab == null) return;
-    if (mounted) setState(() => _currentIndex = tab);
+    const legacyMap = {0: 0, 1: 1, 2: 3, 3: 2};
+    final mapped = legacyMap[tab] ?? tab;
+    if (mounted) setState(() => _currentIndex = mapped.clamp(0, 4));
     NotificationNavigationService.clearTeacherTab();
-  }
-
-  bool _isSmallScreen(BuildContext context) {
-    return MediaQuery.of(context).size.width < 390;
   }
 
   Future<void> _logout() async {
     try {
       final dio = await ApiClient.getInstance();
-
       await dio.post(
         '/logout.php',
         options: Options(contentType: Headers.formUrlEncodedContentType),
       );
-
-      // حذف التوكن من الجهاز
       try {
         await FirebaseMessaging.instance.deleteToken();
       } catch (_) {}
-    } catch (_) {
-      // لا نكسر تجربة المستخدم
-    }
+    } catch (_) {}
 
-    // تنظيف الجلسة محليًا
     await SessionStorage.clear();
 
     if (!mounted) return;
-
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const LoginScreen()),
       (route) => false,
@@ -91,125 +89,114 @@ class _TeacherHomeShellState extends State<TeacherHomeShell> {
   void _onMenuSelected(String value) {
     if (value == 'logout') {
       _logout();
-    } else if (value == 'profile') {
+    } else if (value == 'help') {
       Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const ProfileScreen()),
-      );
+          context, MaterialPageRoute(builder: (_) => const HelpScreen()));
+    } else if (value == 'about') {
+      Navigator.push(
+          context, MaterialPageRoute(builder: (_) => const AboutScreen()));
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isSmall = _isSmallScreen(context);
-
     return Scaffold(
       appBar: AppBar(
         elevation: 0,
         centerTitle: true,
-        title: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              _titles[_currentIndex],
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 2),
-            //const Text('منصة تعليم القرآن', style: TextStyle(fontSize: 11)),
-          ],
+        title: Text(
+          _titles[_currentIndex],
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
-          PopupMenuButton<String>(
-            tooltip: 'الحساب',
-            onSelected: _onMenuSelected,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
+          // Avatar يفتح الـ Profile مباشرةً
+          GestureDetector(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ProfileScreen()),
             ),
+            child: const Padding(
+              padding: EdgeInsets.only(left: 4, right: 4),
+              child: CircleAvatar(
+                radius: 17,
+                backgroundColor: Color(0xFF0F766E),
+                child: Icon(Icons.person, size: 20, color: Colors.white),
+              ),
+            ),
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'المزيد',
+            onSelected: _onMenuSelected,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             offset: const Offset(0, 48),
             itemBuilder: (context) => const [
               PopupMenuItem<String>(
-                value: 'profile',
-                child: Row(
-                  children: [
-                    Icon(Icons.person_outline),
-                    SizedBox(width: 10),
-                    Text('الحساب'),
-                  ],
-                ),
+                value: 'help',
+                child: Row(children: [
+                  Icon(Icons.help_outline),
+                  SizedBox(width: 10),
+                  Text('مساعدة'),
+                ]),
+              ),
+              PopupMenuItem<String>(
+                value: 'about',
+                child: Row(children: [
+                  Icon(Icons.info_outline),
+                  SizedBox(width: 10),
+                  Text('حول التطبيق'),
+                ]),
               ),
               PopupMenuDivider(),
               PopupMenuItem<String>(
                 value: 'logout',
-                child: Row(
-                  children: [
-                    Icon(Icons.logout, color: Colors.red),
-                    SizedBox(width: 10),
-                    Text('تسجيل الخروج'),
-                  ],
-                ),
+                child: Row(children: [
+                  Icon(Icons.logout, color: Colors.red),
+                  SizedBox(width: 10),
+                  Text('تسجيل الخروج'),
+                ]),
               ),
             ],
             child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12),
-              child: CircleAvatar(
-                radius: 17,
-                backgroundColor: Colors.teal,
-                child: Icon(Icons.person, color: Colors.white, size: 18),
-              ),
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: Icon(Icons.more_vert),
             ),
           ),
         ],
       ),
-
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 220),
-        child: KeyedSubtree(
-          key: ValueKey<int>(_currentIndex),
-          child: _pages[_currentIndex],
-        ),
-      ),
-
-      bottomNavigationBar: NavigationBarTheme(
-        data: NavigationBarThemeData(
-          height: isSmall ? 82 : 72, // 👈 الحل هنا
-          labelTextStyle: WidgetStateProperty.all(
-            TextStyle(
-              fontSize: isSmall ? 10.5 : 12,
-              fontWeight: FontWeight.w600,
-            ),
+      body: IndexedStack(index: _currentIndex, children: _pages),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        onDestinationSelected: (index) =>
+            setState(() => _currentIndex = index),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.dashboard_outlined),
+            selectedIcon: Icon(Icons.dashboard),
+            label: 'الرئيسية',
           ),
-        ),
-        child: NavigationBar(
-          selectedIndex: _currentIndex,
-          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-          onDestinationSelected: (index) {
-            setState(() {
-              _currentIndex = index;
-            });
-          },
-          destinations: [
-            NavigationDestination(
-              icon: Icon(Icons.dashboard_outlined, size: isSmall ? 20 : 24),
-              selectedIcon: Icon(Icons.dashboard, size: isSmall ? 20 : 24),
-              label: 'الرئيسية',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.people_outline, size: isSmall ? 20 : 24),
-              selectedIcon: Icon(Icons.people, size: isSmall ? 20 : 24),
-              label: 'الطلاب',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.history_outlined, size: isSmall ? 20 : 24),
-              selectedIcon: Icon(Icons.history, size: isSmall ? 20 : 24),
-              label: 'الجلسات',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.mail_outline, size: isSmall ? 20 : 24),
-              selectedIcon: Icon(Icons.mail, size: isSmall ? 20 : 24),
-              label: 'الرسائل',
-            ),
-          ],
-        ),
+          NavigationDestination(
+            icon: Icon(Icons.people_outline),
+            selectedIcon: Icon(Icons.people),
+            label: 'الطلاب',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.mail_outline),
+            selectedIcon: Icon(Icons.mail),
+            label: 'الرسائل',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.history_outlined),
+            selectedIcon: Icon(Icons.history),
+            label: 'الجلسات',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.calendar_month_outlined),
+            selectedIcon: Icon(Icons.calendar_month),
+            label: 'الجدول',
+          ),
+        ],
       ),
     );
   }

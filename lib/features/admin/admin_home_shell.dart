@@ -3,22 +3,18 @@ import 'package:flutter/material.dart';
 
 import '../../core/network/api_client.dart';
 import '../../core/notifications/notification_navigation_service.dart';
+import '../../core/ui/app_snackbar.dart';
 import '../auth/login_screen.dart';
-
-import 'admin_dashboard_screen.dart';
-import 'admin_reports_screen.dart';
-import 'admin_sessions_screen.dart';
-import 'admin_pending_requests_screen.dart';
-import 'admin_assignments_screen.dart';
-import 'admin_manage_students_screen.dart';
-import 'admin_directory_screen.dart';
-import 'admin_deleted_users_screen.dart';
-import 'admin_messages_screen.dart';
-import 'admin_settings_screen.dart';
-
+import '../about/about_screen.dart';
+import '../about/help_screen.dart';
 import '../profile/profile_screen.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import '../../core/storage/session_storage.dart';
+
+import 'admin_dashboard_screen.dart';
+import 'admin_messages_screen.dart';
+import 'admin_accounts_tab_screen.dart';
+import 'admin_monitoring_tab_screen.dart';
 
 class AdminHomeShell extends StatefulWidget {
   const AdminHomeShell({super.key});
@@ -29,30 +25,36 @@ class AdminHomeShell extends StatefulWidget {
 
 class _AdminHomeShellState extends State<AdminHomeShell> {
   int _currentIndex = 0;
-  final ScrollController _navScrollController = ScrollController();
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
+  final _accountsKey = GlobalKey<AdminAccountsTabScreenState>();
 
-  final List<Widget> _pages = const [
-    AdminDashboardScreen(),
-    AdminPendingRequestsScreen(),
-    AdminAssignmentsScreen(),
-    AdminManageStudentsScreen(),
-    AdminMessagesScreen(),
-    AdminSessionsScreen(),
-    AdminReportsScreen(),
-    AdminDirectoryScreen(),
-    AdminDeletedUsersScreen(),
+  // حالة درور الإعدادات
+  bool _evEnabled = false;
+  bool _spEnabled = false;
+  bool _evOriginal = false;
+  bool _spOriginal = false;
+  int _maxSessionDays = 3;
+  int _maxSessionDaysOriginal = 3;
+  bool _drawerLoading = false;
+  bool _drawerSaving = false;
+
+  bool get _settingsChanged =>
+      _evEnabled != _evOriginal ||
+      _spEnabled != _spOriginal ||
+      _maxSessionDays != _maxSessionDaysOriginal;
+
+  late final List<Widget> _pages = [
+    const AdminDashboardScreen(),
+    AdminAccountsTabScreen(key: _accountsKey),
+    const AdminMonitoringTabScreen(),
+    const AdminMessagesScreen(),
   ];
 
   final List<String> _titles = const [
     'لوحة المشرف',
-    'الطلبات',
-    'الربط',
-    'الإدارة',
-    'الرسائل',
-    'الجلسات',
-    'التقارير',
-    'الدليل',
-    'المحذوفون',
+    'الحسابات',
+    'المتابعة',
+    'التواصل',
   ];
 
   @override
@@ -63,40 +65,58 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
 
   @override
   void dispose() {
-    NotificationNavigationService.adminTabToOpen.removeListener(_onTabRequested);
-    _navScrollController.dispose();
+    NotificationNavigationService.adminTabToOpen
+        .removeListener(_onTabRequested);
     super.dispose();
   }
 
+  // مخطط التحويل: الفهرس القديم (0-8) → (tabIndex, subIndex)
+  // 0:dashboard→(0,-), 1:requests→(1,0), 2:assignments→(1,1),
+  // 3:manage→(1,2), 4:messages→(3,-), 5:sessions→(2,0),
+  // 6:reports→(2,1), 7:directory→(1,3), 8:deleted→(1,4)
   void _onTabRequested() {
     final tab = NotificationNavigationService.adminTabToOpen.value;
     if (tab == null) return;
-    if (mounted) setState(() => _currentIndex = tab);
+
+    const legacyMap = {
+      0: (0, -1),
+      1: (1, 0),
+      2: (1, 1),
+      3: (1, 2),
+      4: (3, -1),
+      5: (2, 0),
+      6: (2, 1),
+      7: (1, 3),
+      8: (1, 4),
+    };
+
+    final mapped = legacyMap[tab] ?? (0, -1);
+    if (mounted) {
+      setState(() => _currentIndex = mapped.$1);
+      if (mapped.$2 >= 0) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _accountsKey.currentState?.jumpToTab(mapped.$2);
+        });
+      }
+    }
     NotificationNavigationService.clearAdminTab();
   }
 
   Future<void> _logout() async {
     try {
       final dio = await ApiClient.getInstance();
-
       await dio.post(
         '/logout.php',
         options: Options(contentType: Headers.formUrlEncodedContentType),
       );
-
-      // حذف التوكن من الجهاز
       try {
         await FirebaseMessaging.instance.deleteToken();
       } catch (_) {}
-    } catch (_) {
-      // لا نكسر تجربة المستخدم
-    }
+    } catch (_) {}
 
-    // تنظيف الجلسة محليًا
     await SessionStorage.clear();
 
     if (!mounted) return;
-
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const LoginScreen()),
       (route) => false,
@@ -106,170 +126,203 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
   void _onMenuSelected(String value) {
     if (value == 'logout') {
       _logout();
-    } else if (value == 'profile') {
+    } else if (value == 'help') {
       Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const ProfileScreen()),
-      );
-    } else if (value == 'settings') {
+          context, MaterialPageRoute(builder: (_) => const HelpScreen()));
+    } else if (value == 'about') {
       Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const AdminSettingsScreen()),
-      );
+          context, MaterialPageRoute(builder: (_) => const AboutScreen()));
     }
   }
 
-  void _changeTab(int index) {
-    if (_currentIndex == index) return;
-
-    setState(() {
-      _currentIndex = index;
-    });
+  Future<void> _openSettingsDrawer() async {
+    setState(() => _drawerLoading = true);
+    try {
+      final dio = await ApiClient.getInstance();
+      final res = await dio.get('/app_settings.php');
+      final body = res.data;
+      if (body is Map && body['ok'] == true) {
+        final data = body['data'] as Map? ?? {};
+        setState(() {
+          _evEnabled = data['email_verification_enabled'] == true;
+          _spEnabled = data['strong_password_enabled'] == true;
+          _maxSessionDays =
+              (data['max_session_days'] as num?)?.toInt() ?? 3;
+          _evOriginal = _evEnabled;
+          _spOriginal = _spEnabled;
+          _maxSessionDaysOriginal = _maxSessionDays;
+        });
+      }
+    } catch (_) {}
+    setState(() => _drawerLoading = false);
+    _scaffoldKey.currentState?.openDrawer();
   }
 
-  Widget _buildNavItem({
-    required IconData icon,
-    required IconData selectedIcon,
-    required String label,
-    required int index,
-  }) {
-    final isSelected = _currentIndex == index;
+  Future<void> _saveDrawerSettings() async {
+    setState(() => _drawerSaving = true);
+    try {
+      final dio = await ApiClient.getInstance();
+      final res = await dio.post('/admin/settings.php', data: {
+        'email_verification_enabled': _evEnabled,
+        'strong_password_enabled': _spEnabled,
+        'max_session_days': _maxSessionDays,
+      });
+      final body = res.data;
+      if (body is Map && body['ok'] == true) {
+        _scaffoldKey.currentState?.closeDrawer();
+        if (mounted) AppSnackBar.info(context, 'تم حفظ الإعدادات.');
+      }
+    } catch (_) {}
+    setState(() => _drawerSaving = false);
+  }
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(18),
-          onTap: () => _changeTab(index),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOut,
-            constraints: const BoxConstraints(minWidth: 82),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: isSelected
-                  ? const Color(0xFF0F766E).withValues(alpha: 0.10)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                color: isSelected
-                    ? const Color(0xFF0F766E).withValues(alpha: 0.18)
-                    : Colors.transparent,
+  Widget _buildSettingsDrawer() {
+    return Drawer(
+      child: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+              child: Row(
+                children: [
+                  const Icon(Icons.settings_outlined, color: Colors.teal),
+                  const SizedBox(width: 8),
+                  const Text('الإعدادات',
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => _scaffoldKey.currentState?.closeDrawer(),
+                  ),
+                ],
               ),
             ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  isSelected ? selectedIcon : icon,
-                  size: 20,
-                  color: isSelected
-                      ? const Color(0xFF0F766E)
-                      : const Color(0xFF6B7280),
+            const Divider(height: 1),
+            if (_drawerLoading)
+              const Expanded(child: Center(child: CircularProgressIndicator()))
+            else
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.all(12),
+                  children: [
+                    Card(
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      child: Column(
+                        children: [
+                          SwitchListTile(
+                            value: _evEnabled,
+                            onChanged: (v) => setState(() => _evEnabled = v),
+                            title: const Text('التحقق من البريد الإلكتروني'),
+                            subtitle: const Text('إرسال كود تحقق عند التسجيل',
+                                style: TextStyle(fontSize: 12)),
+                            secondary: const Icon(
+                                Icons.mark_email_read_outlined,
+                                color: Colors.teal),
+                            activeThumbColor: Colors.teal,
+                          ),
+                          const Divider(height: 1),
+                          SwitchListTile(
+                            value: _spEnabled,
+                            onChanged: (v) => setState(() => _spEnabled = v),
+                            title: const Text('كلمة المرور القوية'),
+                            subtitle: const Text('8 أحرف + حرف كبير + رقم',
+                                style: TextStyle(fontSize: 12)),
+                            secondary: const Icon(Icons.lock_outlined,
+                                color: Colors.teal),
+                            activeThumbColor: Colors.teal,
+                          ),
+                          const Divider(height: 1),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 12),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.calendar_month_outlined,
+                                    color: Colors.teal),
+                                const SizedBox(width: 12),
+                                const Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text('أيام الجلسات الأسبوعية'),
+                                      Text(
+                                        'الحد الأقصى لأيام الطالب (1–5)',
+                                        style: TextStyle(fontSize: 12,
+                                            color: Colors.grey),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.remove_circle_outline),
+                                  color: _maxSessionDays > 1
+                                      ? Colors.teal
+                                      : Colors.grey,
+                                  onPressed: _maxSessionDays > 1
+                                      ? () => setState(
+                                          () => _maxSessionDays--)
+                                      : null,
+                                ),
+                                Text(
+                                  '$_maxSessionDays',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.add_circle_outline),
+                                  color: _maxSessionDays < 5
+                                      ? Colors.teal
+                                      : Colors.grey,
+                                  onPressed: _maxSessionDays < 5
+                                      ? () => setState(
+                                          () => _maxSessionDays++)
+                                      : null,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    if (_settingsChanged)
+                      ElevatedButton(
+                        onPressed: _drawerSaving ? null : _saveDrawerSettings,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.teal,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(double.infinity, 48),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: _drawerSaving
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white))
+                            : const Text('حفظ'),
+                      )
+                    else
+                      OutlinedButton(
+                        onPressed: () =>
+                            _scaffoldKey.currentState?.closeDrawer(),
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(double.infinity, 48),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: const Text('عودة'),
+                      ),
+                  ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.fade,
-                  softWrap: false,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-                    color: isSelected
-                        ? const Color(0xFF0F766E)
-                        : const Color(0xFF6B7280),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBottomBar() {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Color(0x11000000),
-            blurRadius: 12,
-            offset: Offset(0, -2),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: 86,
-          child: SingleChildScrollView(
-            controller: _navScrollController,
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Row(
-              children: [
-                _buildNavItem(
-                  icon: Icons.dashboard_outlined,
-                  selectedIcon: Icons.dashboard,
-                  label: 'الرئيسية',
-                  index: 0,
-                ),
-                _buildNavItem(
-                  icon: Icons.pending_actions_outlined,
-                  selectedIcon: Icons.pending_actions,
-                  label: 'الطلبات',
-                  index: 1,
-                ),
-                _buildNavItem(
-                  icon: Icons.link_outlined,
-                  selectedIcon: Icons.link,
-                  label: 'الربط',
-                  index: 2,
-                ),
-                _buildNavItem(
-                  icon: Icons.manage_accounts_outlined,
-                  selectedIcon: Icons.manage_accounts,
-                  label: 'الإدارة',
-                  index: 3,
-                ),
-                _buildNavItem(
-                  icon: Icons.mail_outlined,
-                  selectedIcon: Icons.mail,
-                  label: 'الرسائل',
-                  index: 4,
-                ),
-                _buildNavItem(
-                  icon: Icons.history_outlined,
-                  selectedIcon: Icons.history,
-                  label: 'الجلسات',
-                  index: 5,
-                ),
-                _buildNavItem(
-                  icon: Icons.bar_chart_outlined,
-                  selectedIcon: Icons.bar_chart,
-                  label: 'التقارير',
-                  index: 6,
-                ),
-                _buildNavItem(
-                  icon: Icons.menu_book_outlined,
-                  selectedIcon: Icons.menu_book,
-                  label: 'الدليل',
-                  index: 7,
-                ),
-                _buildNavItem(
-                  icon: Icons.delete_outline,
-                  selectedIcon: Icons.delete,
-                  label: 'المحذوفون',
-                  index: 8,
-                ),
-              ],
-            ),
-          ),
+              ),
+          ],
         ),
       ),
     );
@@ -278,59 +331,99 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      key: _scaffoldKey,
+      drawer: _buildSettingsDrawer(),
+      drawerEnableOpenDragGesture: false,
       appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: IconButton(
+          icon: const Icon(Icons.settings_outlined),
+          tooltip: 'الإعدادات',
+          onPressed: _openSettingsDrawer,
+        ),
         title: Text(_titles[_currentIndex]),
         centerTitle: true,
         actions: [
+          // Avatar يفتح الـ Profile مباشرةً
+          GestureDetector(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ProfileScreen()),
+            ),
+            child: const Padding(
+              padding: EdgeInsets.only(left: 4, right: 4),
+              child: CircleAvatar(
+                radius: 17,
+                backgroundColor: Color(0xFF0F766E),
+                child: Icon(Icons.person, size: 20, color: Colors.white),
+              ),
+            ),
+          ),
           PopupMenuButton<String>(
-            tooltip: 'الحساب',
+            tooltip: 'المزيد',
             onSelected: _onMenuSelected,
             itemBuilder: (context) => const [
               PopupMenuItem<String>(
-                value: 'profile',
-                child: Row(
-                  children: [
-                    Icon(Icons.person_outline),
-                    SizedBox(width: 10),
-                    Text('الحساب'),
-                  ],
-                ),
+                value: 'help',
+                child: Row(children: [
+                  Icon(Icons.help_outline),
+                  SizedBox(width: 10),
+                  Text('مساعدة'),
+                ]),
               ),
               PopupMenuItem<String>(
-                value: 'settings',
-                child: Row(
-                  children: [
-                    Icon(Icons.settings_outlined),
-                    SizedBox(width: 10),
-                    Text('الإعدادات'),
-                  ],
-                ),
+                value: 'about',
+                child: Row(children: [
+                  Icon(Icons.info_outline),
+                  SizedBox(width: 10),
+                  Text('حول التطبيق'),
+                ]),
               ),
               PopupMenuDivider(),
               PopupMenuItem<String>(
                 value: 'logout',
-                child: Row(
-                  children: [
-                    Icon(Icons.logout, color: Colors.red),
-                    SizedBox(width: 10),
-                    Text('تسجيل الخروج'),
-                  ],
-                ),
+                child: Row(children: [
+                  Icon(Icons.logout, color: Colors.red),
+                  SizedBox(width: 10),
+                  Text('تسجيل الخروج'),
+                ]),
               ),
             ],
             child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12),
-              child: CircleAvatar(
-                radius: 17,
-                backgroundColor: Colors.teal,
-                child: Icon(Icons.person, color: Colors.white, size: 18),
-              ),
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: Icon(Icons.more_vert),
             ),
           ),
         ],
       ),
       body: IndexedStack(index: _currentIndex, children: _pages),
-      bottomNavigationBar: _buildBottomBar(),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (index) =>
+            setState(() => _currentIndex = index),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.dashboard_outlined),
+            selectedIcon: Icon(Icons.dashboard),
+            label: 'الرئيسية',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.manage_accounts_outlined),
+            selectedIcon: Icon(Icons.manage_accounts),
+            label: 'الحسابات',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.bar_chart_outlined),
+            selectedIcon: Icon(Icons.bar_chart),
+            label: 'المتابعة',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.mail_outline),
+            selectedIcon: Icon(Icons.mail),
+            label: 'التواصل',
+          ),
+        ],
+      ),
     );
   }
 }

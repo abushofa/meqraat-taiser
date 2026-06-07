@@ -2,7 +2,7 @@ name: quran_app
 description: "A Quran learning app."
 publish_to: 'none'
 
-version: 1.4.0+8
+version: 1.6.0+10
 
 environment:
   sdk: ^3.10.4
@@ -32,6 +32,7 @@ dependencies:
   webview_flutter_android: ^4.12.0
   flutter_foreground_task: ^9.2.2
   audio_session: ^0.1.16
+  device_info_plus: ^13.1.0
   
   
 dev_dependencies:

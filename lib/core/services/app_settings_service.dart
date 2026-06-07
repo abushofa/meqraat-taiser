@@ -3,6 +3,7 @@ import '../network/api_client.dart';
 class AppSettingsService {
   static bool emailVerificationEnabled = false;
   static bool strongPasswordEnabled = false;
+  static int maxSessionDays = 3;
   static bool _loaded = false;
 
   static Future<void> load() async {
@@ -15,6 +16,7 @@ class AppSettingsService {
         final data = body['data'] as Map? ?? {};
         emailVerificationEnabled = data['email_verification_enabled'] == true;
         strongPasswordEnabled = data['strong_password_enabled'] == true;
+        maxSessionDays = (data['max_session_days'] as num?)?.toInt() ?? 3;
         _loaded = true;
       }
     } catch (_) {}

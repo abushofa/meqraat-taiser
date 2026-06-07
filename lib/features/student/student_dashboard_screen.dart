@@ -4,6 +4,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../core/network/api_client.dart';
 import '../../core/ui/app_snackbar.dart';
 import '../../core/widgets/status_badge.dart';
+import '../../core/widgets/day_picker_widget.dart';
 import '../call/agora_call_screen.dart';
 
 import '../../core/utils/update_checker.dart';
@@ -25,6 +26,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   int? _lastNotifiedSessionId;
 
   bool _joiningSession = false;
+  List<String> _scheduledDays = [];
 
   @override
   void initState() {
@@ -62,9 +64,16 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 
       if (body is Map && body['ok'] == true) {
         final parsed = Map<String, dynamic>.from(body['data']);
-
+        final rawDays = parsed['scheduled_days'];
         setState(() {
           _data = parsed;
+          if (rawDays is List) {
+            _scheduledDays = rawDays.map((e) => e.toString()).toList();
+          } else if (rawDays is String && rawDays.isNotEmpty) {
+            _scheduledDays = rawDays.split(',');
+          } else {
+            _scheduledDays = [];
+          }
         });
 
       } else {
@@ -86,7 +95,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   void _startActiveSessionPolling() {
     _checkActiveSession();
     _sessionTimer = Timer.periodic(
-      const Duration(seconds: 10),
+      const Duration(seconds: 30),
       (_) => _checkActiveSession(),
     );
   }
@@ -405,6 +414,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
               ),
             const SizedBox(height: 16),
             if (!isWaitlisted) ...[
+              if (_scheduledDays.isNotEmpty) _buildScheduleCard(),
               _card('إجمالي الجلسات', '${stats?['total_sessions'] ?? 0}'),
               _card('الدقائق', '${stats?['total_minutes'] ?? 0}'),
             ],
@@ -415,70 +425,74 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   }
 
   Widget _buildStudentHeader(Map<String, dynamic>? student, Map<String, dynamic>? profile) {
+    final name = profile?['name']?.toString().trim() ?? '—';
+    final status = student?['status']?.toString() ?? '';
     return _DashboardCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          const Row(
-            children: [
-              CircleAvatar(
-                radius: 24,
-                backgroundColor: Color(0xFFE0F2FE),
-                child: Icon(Icons.school, color: Colors.lightBlue),
-              ),
-              SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'بيانات الطالب',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
+          const CircleAvatar(
+            radius: 22,
+            backgroundColor: Color(0xFFE0F2FE),
+            child: Icon(Icons.school, color: Colors.lightBlue, size: 22),
           ),
-          const SizedBox(height: 16),
-          _infoTile('الاسم', value: profile?['name']?.toString().trim() ?? '—'),
-          _infoTile('الإيميل', value: profile?['email']?.toString() ?? '—'),
-          _infoTile(
-            'الحالة',
-            trailing: StatusBadge(status: student?['status']?.toString() ?? ''),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              name,
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
+          if (status.isNotEmpty) StatusBadge(status: status),
         ],
       ),
     );
   }
 
-  Widget _infoTile(String label, {String? value, Widget? trailing}) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
+  Widget _buildScheduleCard() {
+    return _DashboardCard(
       child: Row(
         children: [
+          const Icon(Icons.calendar_month_outlined,
+              color: Color(0xFF0F766E), size: 22),
+          const SizedBox(width: 12),
           Expanded(
-            flex: 2,
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF374151),
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 3,
-            child: trailing ??
-                Text(
-                  value ?? '—',
-                  textAlign: TextAlign.left,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Color(0xFF111827),
-                  ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'جدولك الأسبوعي',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                 ),
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: _scheduledDays.map((day) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0F766E).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color:
+                              const Color(0xFF0F766E).withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Text(
+                        kDayLabels[day] ?? day,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF0F766E),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
           ),
         ],
       ),

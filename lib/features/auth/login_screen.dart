@@ -9,6 +9,7 @@ import 'student_register_screen.dart';
 import 'teacher_register_screen.dart';
 import '../../core/storage/session_storage.dart';
 import '../../core/notifications/push_notification_service.dart';
+import '../../core/utils/device_info_helper.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -85,7 +86,7 @@ class _LoginScreenState extends State<LoginScreen>
     });
   }
 
-  Future<void> _login() async {
+  Future<void> _login({bool force = false}) async {
     final email = _emailController.text.trim();
     final password = _passwordController.text;
 
@@ -103,12 +104,21 @@ class _LoginScreenState extends State<LoginScreen>
       _success = null;
     });
 
+    final deviceName = await DeviceInfoHelper.getDeviceName();
+    final deviceId   = await DeviceInfoHelper.getDeviceId();
+
     try {
       final dio = await ApiClient.getInstance();
 
       final response = await dio.post(
         '/login.php',
-        data: {'email': email, 'password': password},
+        data: {
+          'email': email,
+          'password': password,
+          'device_name': deviceName,
+          'device_id': deviceId,
+          if (force) 'force': true,
+        },
       );
 
       final data = response.data;
@@ -150,6 +160,20 @@ class _LoginScreenState extends State<LoginScreen>
     } on DioException catch (e) {
       String message = 'فشل الاتصال بالخادم';
 
+      // مسجّل على جهاز آخر
+      if (e.response?.statusCode == 409 &&
+          e.response?.data is Map &&
+          e.response!.data['error']?['already_logged_in'] == true) {
+        final otherDevice =
+            e.response!.data['error']?['device_name']?.toString() ??
+            'جهاز غير معروف';
+        if (mounted) {
+          setState(() => _loading = false);
+          _showAlreadyLoggedInDialog(otherDevice);
+        }
+        return;
+      }
+
       if (e.response?.statusCode == 401) {
         message = 'بيانات الدخول غير صحيحة';
       } else if (e.response?.data is Map) {
@@ -184,6 +208,34 @@ class _LoginScreenState extends State<LoginScreen>
         });
       }
     }
+  }
+
+  void _showAlreadyLoggedInDialog(String otherDevice) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('أنت مسجّل الدخول بالفعل'),
+        content: Text(
+          'تم تسجيل دخولك مسبقاً على:\n\n$otherDevice\n\nهل تريد تسجيل الخروج منه والدخول من هذا الجهاز؟',
+          style: const TextStyle(height: 1.6),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _login(force: true);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
+            child: const Text('ادخل من هنا', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _goToStudentRegister() async {
