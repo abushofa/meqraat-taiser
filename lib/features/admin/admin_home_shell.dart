@@ -124,7 +124,10 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
   }
 
   void _onMenuSelected(String value) {
-    if (value == 'logout') {
+    if (value == 'profile') {
+      Navigator.push(
+          context, MaterialPageRoute(builder: (_) => const ProfileScreen()));
+    } else if (value == 'logout') {
       _logout();
     } else if (value == 'help') {
       Navigator.push(
@@ -344,54 +347,53 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
         title: Text(_titles[_currentIndex]),
         centerTitle: true,
         actions: [
-          // Avatar يفتح الـ Profile مباشرةً
-          GestureDetector(
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const ProfileScreen()),
-            ),
-            child: const Padding(
-              padding: EdgeInsets.only(left: 4, right: 4),
-              child: CircleAvatar(
+          Padding(
+            padding: const EdgeInsetsDirectional.only(end: 12),
+            child: PopupMenuButton<String>(
+              tooltip: 'القائمة',
+              onSelected: _onMenuSelected,
+              offset: const Offset(0, 48),
+              itemBuilder: (context) => [
+                PopupMenuItem<String>(
+                  value: 'profile',
+                  child: const Row(children: [
+                    Icon(Icons.person_outline),
+                    SizedBox(width: 10),
+                    Text('الملف الشخصي'),
+                  ]),
+                ),
+                const PopupMenuDivider(),
+                const PopupMenuItem<String>(
+                  value: 'help',
+                  child: Row(children: [
+                    Icon(Icons.help_outline),
+                    SizedBox(width: 10),
+                    Text('مساعدة'),
+                  ]),
+                ),
+                const PopupMenuItem<String>(
+                  value: 'about',
+                  child: Row(children: [
+                    Icon(Icons.info_outline),
+                    SizedBox(width: 10),
+                    Text('حول التطبيق'),
+                  ]),
+                ),
+                const PopupMenuDivider(),
+                const PopupMenuItem<String>(
+                  value: 'logout',
+                  child: Row(children: [
+                    Icon(Icons.logout, color: Colors.red),
+                    SizedBox(width: 10),
+                    Text('تسجيل الخروج'),
+                  ]),
+                ),
+              ],
+              child: const CircleAvatar(
                 radius: 17,
                 backgroundColor: Color(0xFF0F766E),
                 child: Icon(Icons.person, size: 20, color: Colors.white),
               ),
-            ),
-          ),
-          PopupMenuButton<String>(
-            tooltip: 'المزيد',
-            onSelected: _onMenuSelected,
-            itemBuilder: (context) => const [
-              PopupMenuItem<String>(
-                value: 'help',
-                child: Row(children: [
-                  Icon(Icons.help_outline),
-                  SizedBox(width: 10),
-                  Text('مساعدة'),
-                ]),
-              ),
-              PopupMenuItem<String>(
-                value: 'about',
-                child: Row(children: [
-                  Icon(Icons.info_outline),
-                  SizedBox(width: 10),
-                  Text('حول التطبيق'),
-                ]),
-              ),
-              PopupMenuDivider(),
-              PopupMenuItem<String>(
-                value: 'logout',
-                child: Row(children: [
-                  Icon(Icons.logout, color: Colors.red),
-                  SizedBox(width: 10),
-                  Text('تسجيل الخروج'),
-                ]),
-              ),
-            ],
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8),
-              child: Icon(Icons.more_vert),
             ),
           ),
         ],

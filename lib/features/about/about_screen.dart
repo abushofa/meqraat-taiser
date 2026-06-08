@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
@@ -7,9 +8,20 @@ class AboutScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('حول التطبيق'), centerTitle: true),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
+      body: FutureBuilder<PackageInfo>(
+        future: PackageInfo.fromPlatform(),
+        builder: (context, snapshot) {
+          final version = snapshot.hasData ? snapshot.data!.version : '...';
+          return _buildBody(version);
+        },
+      ),
+    );
+  }
+
+  Widget _buildBody(String version) {
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
           const SizedBox(height: 16),
           Center(
             child: Image.asset(
@@ -27,10 +39,10 @@ class AboutScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          const Center(
+          Center(
             child: Text(
-              'الإصدار 1.4.0',
-              style: TextStyle(color: Colors.grey, fontSize: 14),
+              'الإصدار $version',
+              style: const TextStyle(color: Colors.grey, fontSize: 14),
             ),
           ),
           const SizedBox(height: 32),
@@ -51,7 +63,6 @@ class AboutScreen extends StatelessWidget {
           ]),
           const SizedBox(height: 32),
         ],
-      ),
     );
   }
 
