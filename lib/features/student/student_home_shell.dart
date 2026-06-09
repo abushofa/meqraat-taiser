@@ -91,10 +91,7 @@ class _StudentHomeShellState extends State<StudentHomeShell> {
   }
 
   void _onMenuSelected(String value) {
-    if (value == 'profile') {
-      Navigator.push(
-          context, MaterialPageRoute(builder: (_) => const ProfileScreen()));
-    } else if (value == 'logout') {
+    if (value == 'logout') {
       _logout();
     } else if (value == 'help') {
       Navigator.push(
@@ -109,52 +106,51 @@ class _StudentHomeShellState extends State<StudentHomeShell> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_titles[_currentIndex]),
         centerTitle: true,
+        automaticallyImplyLeading: false,
+        leading: PopupMenuButton<String>(
+          tooltip: 'المزيد',
+          onSelected: _onMenuSelected,
+          offset: const Offset(0, 48),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          itemBuilder: (context) => const [
+            PopupMenuItem<String>(
+              value: 'help',
+              child: Row(children: [
+                Icon(Icons.help_outline),
+                SizedBox(width: 10),
+                Text('مساعدة'),
+              ]),
+            ),
+            PopupMenuItem<String>(
+              value: 'about',
+              child: Row(children: [
+                Icon(Icons.info_outline),
+                SizedBox(width: 10),
+                Text('حول التطبيق'),
+              ]),
+            ),
+            PopupMenuDivider(),
+            PopupMenuItem<String>(
+              value: 'logout',
+              child: Row(children: [
+                Icon(Icons.logout, color: Colors.red),
+                SizedBox(width: 10),
+                Text('تسجيل الخروج'),
+              ]),
+            ),
+          ],
+          child: const Icon(Icons.more_vert),
+        ),
+        title: Text(_titles[_currentIndex]),
         actions: [
           Padding(
             padding: const EdgeInsetsDirectional.only(end: 12),
-            child: PopupMenuButton<String>(
-              tooltip: 'القائمة',
-              onSelected: _onMenuSelected,
-              offset: const Offset(0, 48),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              itemBuilder: (context) => [
-                PopupMenuItem<String>(
-                  value: 'profile',
-                  child: const Row(children: [
-                    Icon(Icons.person_outline),
-                    SizedBox(width: 10),
-                    Text('الملف الشخصي'),
-                  ]),
-                ),
-                const PopupMenuDivider(),
-                const PopupMenuItem<String>(
-                  value: 'help',
-                  child: Row(children: [
-                    Icon(Icons.help_outline),
-                    SizedBox(width: 10),
-                    Text('مساعدة'),
-                  ]),
-                ),
-                const PopupMenuItem<String>(
-                  value: 'about',
-                  child: Row(children: [
-                    Icon(Icons.info_outline),
-                    SizedBox(width: 10),
-                    Text('حول التطبيق'),
-                  ]),
-                ),
-                const PopupMenuDivider(),
-                const PopupMenuItem<String>(
-                  value: 'logout',
-                  child: Row(children: [
-                    Icon(Icons.logout, color: Colors.red),
-                    SizedBox(width: 10),
-                    Text('تسجيل الخروج'),
-                  ]),
-                ),
-              ],
+            child: GestureDetector(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ProfileScreen()),
+              ),
               child: const CircleAvatar(
                 radius: 17,
                 backgroundColor: Color(0xFF0F766E),

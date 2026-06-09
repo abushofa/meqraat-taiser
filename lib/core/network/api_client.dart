@@ -46,17 +46,15 @@ class ApiClient {
 }
 
 class _RemoteLogoutDialog extends StatelessWidget {
+  final String message;
   final Future<void> Function() onDismissed;
-  const _RemoteLogoutDialog({required this.onDismissed});
+  const _RemoteLogoutDialog({required this.message, required this.onDismissed});
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text('تم تسجيل خروجك'),
-      content: const Text(
-        'تم تسجيل دخول حسابك من جهاز آخر.\nستنتقل إلى شاشة الدخول.',
-        style: TextStyle(height: 1.6),
-      ),
+      content: Text(message, style: const TextStyle(height: 1.6)),
       actions: [
         ElevatedButton(
           onPressed: () {
@@ -75,17 +73,28 @@ class _RemoteLogoutInterceptor extends Interceptor {
   void onError(DioException err, ErrorInterceptorHandler handler) {
     if (err.response?.statusCode == 401) {
       final errorData = err.response?.data;
-      if (errorData is Map &&
+      final isRemoteLogout = errorData is Map &&
           errorData['error'] is Map &&
-          errorData['error']['logged_out_remotely'] == true) {
-        _handleRemoteLogout();
+          errorData['error']['logged_out_remotely'] == true;
+
+      // تجاهل 401 الصادر من صفحة تسجيل الدخول نفسها (بيانات خاطئة)
+      final isLoginRequest =
+          err.requestOptions.path.contains('login.php');
+
+      if (!isLoginRequest) {
+        _handleSessionExpired(remoteLogout: isRemoteLogout);
       }
     }
     handler.next(err);
   }
 
-  Future<void> _handleRemoteLogout() async {
+  Future<void> _handleSessionExpired({required bool remoteLogout}) async {
     if (ApiClient.isShowingRemoteLogout) return;
+
+    // تحقق أن المستخدم كان داخل التطبيق فعلاً
+    final wasLoggedIn = await SessionStorage.isLoggedIn();
+    if (!wasLoggedIn) return;
+
     ApiClient.setRemoteLogoutShowing(true);
 
     final navigator = NotificationNavigationService.navigatorKey.currentState;
@@ -94,17 +103,23 @@ class _RemoteLogoutInterceptor extends Interceptor {
       return;
     }
 
-    // نعرض الديالوج أولاً بدون async gap بين حفظ context واستخدامه
+    final message = remoteLogout
+        ? 'تم تسجيل دخول حسابك من جهاز آخر.\nستنتقل إلى شاشة الدخول.'
+        : 'انتهت مدة جلستك.\nالرجاء تسجيل الدخول مرة أخرى.';
+
     navigator.push(
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (_) => _RemoteLogoutDialog(onDismissed: () async {
-          await SessionStorage.clear();
-          ApiClient.reset();
-          NotificationNavigationService.navigatorKey.currentState
-              ?.pushNamedAndRemoveUntil('/login', (route) => false);
-          ApiClient.setRemoteLogoutShowing(false);
-        }),
+        builder: (_) => _RemoteLogoutDialog(
+          message: message,
+          onDismissed: () async {
+            await SessionStorage.clear();
+            ApiClient.reset();
+            NotificationNavigationService.navigatorKey.currentState
+                ?.pushNamedAndRemoveUntil('/login', (route) => false);
+            ApiClient.setRemoteLogoutShowing(false);
+          },
+        ),
       ),
     );
   }

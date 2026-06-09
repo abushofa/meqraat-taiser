@@ -84,6 +84,23 @@ class _LoginScreenState extends State<LoginScreen>
       if (!mounted) return;
       _pulseController.repeat(reverse: true);
     });
+
+    // إذا كانت هناك جلسة سابقة لم تُغلق بشكل صحيح، امسح الـ token من السيرفر
+    // حتى لا يُمنع المستخدم من الدخول على جهاز آخر لاحقاً
+    _clearStaleSession();
+  }
+
+  Future<void> _clearStaleSession() async {
+    final wasLoggedIn = await SessionStorage.isLoggedIn();
+    if (!wasLoggedIn) return;
+    await SessionStorage.clear();
+    try {
+      final dio = await ApiClient.getInstance();
+      await dio.post(
+        '/logout.php',
+        options: Options(contentType: Headers.formUrlEncodedContentType),
+      );
+    } catch (_) {}
   }
 
   Future<void> _login({bool force = false}) async {

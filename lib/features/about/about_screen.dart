@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
@@ -54,7 +55,7 @@ class AboutScreen extends StatelessWidget {
           _infoCard([
             _infoRow(Icons.code_outlined, 'التطوير', 'فريق مقرأة التيسير'),
             const Divider(height: 1),
-            _infoRow(Icons.language_outlined, 'الموقع', 'taiser.net'),
+            _linkRow(Icons.language_outlined, 'الموقع', 'https://www.taiser.net'),
           ]),
           const SizedBox(height: 12),
           _infoCard([
@@ -70,6 +71,42 @@ class AboutScreen extends StatelessWidget {
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: Column(children: children),
+    );
+  }
+
+  Widget _linkRow(IconData icon, String label, String url) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: Colors.teal, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
+                const SizedBox(height: 4),
+                GestureDetector(
+                  onTap: () => launchUrl(Uri.parse(url),
+                      mode: LaunchMode.externalApplication),
+                  child: Text(
+                    url,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Colors.teal,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
