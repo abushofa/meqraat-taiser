@@ -88,11 +88,22 @@
 
     <p><strong>a) Account Information</strong></p>
     <ul>
-      <li>Email address and password (collected at registration and login).</li>
+      <li>Full name.</li>
+      <li>Email address and password.</li>
+      <li>Age.</li>
+      <li>Gender.</li>
       <li>Account type: Student or Teacher.</li>
     </ul>
 
-    <p><strong>b) Session Data</strong></p>
+    <p><strong>b) Learning Preferences (Students)</strong></p>
+    <ul>
+      <li>Current Quran reading level.</li>
+      <li>Requested recitation style or curriculum.</li>
+      <li>Preferred session time (morning / afternoon / evening).</li>
+      <li>Preferred days of the week.</li>
+    </ul>
+
+    <p><strong>c) Session Data</strong></p>
     <ul>
       <li>Session records: start time, end time, and participants.</li>
       <li>Audio recordings of sessions — saved <strong>locally on your device only</strong>
@@ -100,20 +111,20 @@
       <li>Teacher notes and feedback associated with each session.</li>
     </ul>
 
-    <p><strong>c) Device Information</strong></p>
+    <p><strong>d) Device Information</strong></p>
     <ul>
       <li>Device identifier — used solely to enforce single-device login and prevent
           unauthorized concurrent sessions.</li>
       <li>Operating system and version — for technical compatibility purposes.</li>
     </ul>
 
-    <p><strong>d) Push Notification Token</strong></p>
+    <p><strong>e) Push Notification Token</strong></p>
     <ul>
       <li>Firebase Cloud Messaging (FCM) token — used to deliver session reminders
           and in-app notifications to your device.</li>
     </ul>
 
-    <p><strong>e) In-App Content</strong></p>
+    <p><strong>f) In-App Content</strong></p>
     <ul>
       <li>Messages exchanged between students and teachers within the app.</li>
       <li>Assignments and tasks assigned to students.</li>
@@ -127,6 +138,11 @@
       <li>
         <strong>Microphone</strong> — required to conduct live audio sessions with
         your teacher. This permission is only active during a session.
+      </li>
+      <li>
+        <strong>Camera</strong> — optional, used only if the user chooses to enable
+        video during a live session. Video is never recorded; session recordings are
+        audio-only.
       </li>
       <li>
         <strong>Storage (Android)</strong> — required to save session audio recordings
