@@ -4,6 +4,7 @@ import 'package:quran_app/core/storage/session_storage.dart';
 
 import '../../core/notifications/notification_navigation_service.dart';
 import '../../core/network/api_client.dart';
+import '../../core/widgets/delete_account_dialog.dart';
 import '../about/about_screen.dart';
 import '../about/help_screen.dart';
 import '../auth/login_screen.dart';
@@ -24,8 +25,10 @@ class StudentHomeShell extends StatefulWidget {
   State<StudentHomeShell> createState() => _StudentHomeShellState();
 }
 
-class _StudentHomeShellState extends State<StudentHomeShell> {
+class _StudentHomeShellState extends State<StudentHomeShell>
+    with WidgetsBindingObserver {
   late int _currentIndex;
+  DateTime? _lastPresenceAt;
 
   // الترتيب الجديد: الرئيسية | الرسائل | الجلسات | الملاحظات
   final List<Widget> _screens = const [
@@ -48,13 +51,35 @@ class _StudentHomeShellState extends State<StudentHomeShell> {
     _currentIndex = widget.initialTabIndex;
     NotificationNavigationService.studentTabToOpen
         .addListener(_onTabRequested);
+    WidgetsBinding.instance.addObserver(this);
+    _reportPresence();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     NotificationNavigationService.studentTabToOpen
         .removeListener(_onTabRequested);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _reportPresence();
+  }
+
+  // يُبلغ المقريء بدخول الطالب في وقت جلسته — السيرفر يقرر ويمنع التكرار
+  Future<void> _reportPresence() async {
+    final now = DateTime.now();
+    if (_lastPresenceAt != null &&
+        now.difference(_lastPresenceAt!) < const Duration(minutes: 2)) {
+      return;
+    }
+    _lastPresenceAt = now;
+    try {
+      final dio = await ApiClient.getInstance();
+      await dio.post('/student/presence.php');
+    } catch (_) {}
   }
 
   void _onTabRequested() {
@@ -102,6 +127,36 @@ class _StudentHomeShellState extends State<StudentHomeShell> {
     }
   }
 
+  Future<void> _showDeleteAccountConfirm() async {
+    final result = await showDialog<(String, String)>(
+      context: context,
+      builder: (_) => const DeleteAccountDialog(),
+    );
+    if (result != null && mounted) {
+      _deleteAccount(reason: result.$1, comment: result.$2);
+    }
+  }
+
+  Future<void> _deleteAccount({
+    required String reason,
+    String comment = '',
+  }) async {
+    try {
+      final dio = await ApiClient.getInstance();
+      await dio.post('/delete_account.php',
+          data: {'reason': reason, 'comment': comment});
+    } catch (_) {}
+    try {
+      await FirebaseMessaging.instance.deleteToken();
+    } catch (_) {}
+    await SessionStorage.clear();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -146,11 +201,39 @@ class _StudentHomeShellState extends State<StudentHomeShell> {
         actions: [
           Padding(
             padding: const EdgeInsetsDirectional.only(end: 12),
-            child: GestureDetector(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ProfileScreen()),
-              ),
+            child: PopupMenuButton<String>(
+              tooltip: 'تعديل الحساب',
+              offset: const Offset(0, 48),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
+              onSelected: (value) {
+                if (value == 'profile') {
+                  Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => const ProfileScreen()));
+                } else if (value == 'delete_account') {
+                  _showDeleteAccountConfirm();
+                }
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem<String>(
+                  value: 'profile',
+                  child: Row(children: [
+                    Icon(Icons.person_outline),
+                    SizedBox(width: 10),
+                    Text('تعديل الحساب'),
+                  ]),
+                ),
+                PopupMenuDivider(),
+                PopupMenuItem<String>(
+                  value: 'delete_account',
+                  child: Row(children: [
+                    Icon(Icons.delete_outline, color: Colors.red),
+                    SizedBox(width: 10),
+                    Text('حذف الحساب',
+                        style: TextStyle(color: Colors.red)),
+                  ]),
+                ),
+              ],
               child: const CircleAvatar(
                 radius: 17,
                 backgroundColor: Color(0xFF0F766E),

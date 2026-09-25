@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../../core/network/api_client.dart';
+import '../../core/widgets/app_dialogs.dart';
 import 'login_screen.dart';
 
 class VerifyEmailScreen extends StatefulWidget {
@@ -52,6 +53,22 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
       if (body is Map && body['ok'] == true) {
         setState(() => _successMsg = body['message']?.toString() ?? 'تم التحقق بنجاح.');
         await Future.delayed(const Duration(seconds: 2));
+        if (!mounted) return;
+
+        final data = body['data'] as Map? ?? {};
+        if (data['waitlisted'] == true) {
+          final expectedDate = data['expected_start_date']?.toString() ?? '';
+          if (!mounted) return;
+          await AppDialogs.showInfo(
+            context: context,
+            title: 'تم تسجيلك في قائمة الانتظار',
+            message:
+                'المقرأة ممتلئة حاليًا، وتم تسجيلك في قائمة الانتظار.\nالتاريخ المتوقع للانضمام: $expectedDate',
+            icon: Icons.hourglass_top,
+            iconColor: Colors.orange,
+          );
+        }
+
         if (!mounted) return;
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -130,6 +147,29 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
                       'أرسلنا كود التحقق إلى:\n${widget.email}',
                       textAlign: TextAlign.center,
                       style: const TextStyle(color: Colors.grey, height: 1.5),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red.shade200),
+                      ),
+                      child: const Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.warning_amber_rounded, color: Colors.red, size: 18),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'إذا لم تُكمل التحقق الآن، لن يتم حفظ بيانات تسجيلك، وستحتاج لإعادة التسجيل من البداية.',
+                              style: TextStyle(fontSize: 12, color: Colors.black87, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Container(

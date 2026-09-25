@@ -7,6 +7,8 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../core/network/api_client.dart';
 import 'package:audio_session/audio_session.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 @pragma('vm:entry-point')
 void startCallback() {
@@ -85,6 +87,9 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
   int? _remoteUid;
   bool _remoteVideoEnabled = false;
 
+  // الجلسة الجماعية: تتبع كل المتصلين وحالة الفيديو لكل واحد
+  final Map<int, bool> _remoteUsers = {};
+
   bool _isLocalSpeaking = false;
   bool _isRemoteSpeaking = false;
 
@@ -107,6 +112,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
+    WakelockPlus.enable();
     if (Platform.isAndroid) _initForegroundService();
 
     _pulseController = AnimationController(
@@ -277,7 +283,18 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
     }
   }
 
+  Future<void> _requestBatteryOptimization() async {
+    if (!Platform.isAndroid) return;
+    try {
+      final status = await Permission.ignoreBatteryOptimizations.status;
+      if (!status.isGranted) {
+        await Permission.ignoreBatteryOptimizations.request();
+      }
+    } catch (_) {}
+  }
+
   Future<void> _initAgora() async {
+    await _requestBatteryOptimization();
     final appId = _sanitizeAppId(widget.appId);
     final token = _sanitizeToken(widget.token);
     final channelName = _sanitizeChannel(widget.channelName);
@@ -391,6 +408,9 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
             }
             setState(() {
               _remoteUid = remoteUid;
+              if (widget.isGroupSession) {
+                _remoteUsers[remoteUid] = false;
+              }
               _connectionStatus = 'الجلسة متصلة';
             });
             if (widget.isTeacher && widget.isGroupSession) {
@@ -404,8 +424,13 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
               if (name != null) _leftParticipants.add(name);
             }
             setState(() {
+              if (widget.isGroupSession) {
+                _remoteUsers.remove(remoteUid);
+              }
               if (_remoteUid == remoteUid) {
-                _remoteUid = null;
+                _remoteUid = widget.isGroupSession && _remoteUsers.isNotEmpty
+                    ? _remoteUsers.keys.first
+                    : null;
                 _remoteVideoEnabled = false;
                 _isRemoteSpeaking = false;
               }
@@ -418,12 +443,15 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
           },
           onRemoteVideoStateChanged: (connection, remoteUid, state, reason, elapsed) {
             if (!mounted) return;
+            final isOn = state == RemoteVideoState.remoteVideoStateStarting ||
+                state == RemoteVideoState.remoteVideoStateDecoding ||
+                state == RemoteVideoState.remoteVideoStateFrozen;
             setState(() {
+              if (widget.isGroupSession) {
+                _remoteUsers[remoteUid] = isOn;
+              }
               if (_remoteUid == remoteUid) {
-                _remoteVideoEnabled =
-                    state == RemoteVideoState.remoteVideoStateStarting ||
-                    state == RemoteVideoState.remoteVideoStateDecoding ||
-                    state == RemoteVideoState.remoteVideoStateFrozen;
+                _remoteVideoEnabled = isOn;
               }
             });
           },
@@ -837,8 +865,73 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
   }
 
   Widget _buildRemoteArea() {
+    // الجلسة الجماعية: عرض شبكة فيديوهات لكل المتصلين
+    if (widget.isGroupSession && _remoteUsers.isNotEmpty && _engineReady) {
+      final uids = _remoteUsers.keys.toList();
+      return GridView.builder(
+        physics: const NeverScrollableScrollPhysics(),
+        shrinkWrap: true,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: uids.length <= 1 ? 1 : 2,
+          childAspectRatio: uids.length <= 2 ? 16 / 9 : 1,
+          mainAxisSpacing: 4,
+          crossAxisSpacing: 4,
+        ),
+        itemCount: uids.length,
+        itemBuilder: (context, index) {
+          final uid = uids[index];
+          final videoOn = _remoteUsers[uid] == true;
+          final name = _activeParticipants[uid] ?? 'مشارك ${index + 1}';
+
+          if (videoOn) {
+            return Stack(
+              children: [
+                Positioned.fill(
+                  child: AgoraVideoView(
+                    controller: VideoViewController.remote(
+                      rtcEngine: _engine,
+                      canvas: VideoCanvas(uid: uid),
+                      connection: RtcConnection(channelId: widget.channelName),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  bottom: 4, right: 4,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(name, style: const TextStyle(color: Colors.white, fontSize: 11)),
+                  ),
+                ),
+              ],
+            );
+          }
+
+          return Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E293B),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            alignment: Alignment.center,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.person, color: Colors.white54, size: 32),
+                const SizedBox(height: 4),
+                Text(name, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              ],
+            ),
+          );
+        },
+      );
+    }
+
     final bool highlightRemote = _isRemoteSpeaking;
 
+    // الجلسة الفردية أو لا يوجد متصلون
     if (_remoteUid != null && _remoteVideoEnabled && _engineReady) {
       return Stack(
         children: [
@@ -946,6 +1039,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
     _pulseController.dispose();
     if (_engineCreated) _engine.release();
     _pingTimer?.cancel();
+    WakelockPlus.disable();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

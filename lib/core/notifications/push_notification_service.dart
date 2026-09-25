@@ -163,10 +163,31 @@ class PushNotificationService {
     final isLoggedIn = await SessionStorage.isLoggedIn();
     if (!isLoggedIn) return;
 
-    final token = await _messaging.getToken();
-    if (token != null && token.isNotEmpty) {
-      await _registerTokenToServer(token);
+    try {
+      // iOS: getToken() يفشل بصمت إذا استُدعي قبل استلام APNs token من Apple
+      if (Platform.isIOS) {
+        await _waitForApnsToken();
+      }
+      final token = await _messaging.getToken();
+      if (kDebugMode) {
+        debugPrint('FCM getToken result: ${token == null ? "NULL" : "${token.substring(0, 20)}... (len ${token.length})"}');
+      }
+      if (token != null && token.isNotEmpty) {
+        await _registerTokenToServer(token);
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('getToken error: $e');
     }
+  }
+
+  // ينتظر حتى يصبح APNs token جاهزاً (حتى 10 محاولات كل نصف ثانية)
+  static Future<void> _waitForApnsToken() async {
+    for (var i = 0; i < 10; i++) {
+      final apnsToken = await _messaging.getAPNSToken();
+      if (apnsToken != null && apnsToken.isNotEmpty) return;
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+    if (kDebugMode) debugPrint('APNs token still null after waiting');
   }
 
   static Future<void> _showLocalNotification({
@@ -238,6 +259,9 @@ class PushNotificationService {
     // ===== مقريء =====
     if (targetRole == 'teacher') {
       if (type == 'message') NotificationNavigationService.openTeacherMessages();
+      if (type == 'session_reminder') {
+        NotificationNavigationService.openTeacherDashboard();
+      }
       return;
     }
 
@@ -262,7 +286,7 @@ class PushNotificationService {
       return;
     }
 
-    if (type == 'session') {
+    if (type == 'session' || type == 'session_reminder') {
       NotificationNavigationService.openStudentSessions();
       navigator.pushNamedAndRemoveUntil('/student/sessions', (route) => false);
     }
@@ -284,12 +308,14 @@ class PushNotificationService {
 
       final dio = await ApiClient.getInstance();
 
-      await dio.post(
+      final res = await dio.post(
         '/device/register_token.php',
         data: {'token': token, 'platform': Platform.isIOS ? 'ios' : 'android'},
       );
-    } catch (_) {
-      // لا نكسر التطبيق
+      if (kDebugMode) debugPrint('register_token.php response: ${res.data}');
+    } catch (e) {
+      // لا نكسر التطبيق، لكن نسجّل الخطأ في Debug للتشخيص
+      if (kDebugMode) debugPrint('registerTokenToServer error: $e');
     }
   }
 }

@@ -7,6 +7,7 @@ import '../../core/utils/app_labels.dart';
 import '../../core/widgets/app_dialogs.dart';
 import '../../core/ui/app_snackbar.dart';
 import '../../core/utils/admin_refresh_notifier.dart';
+import '../../core/widgets/error_retry_view.dart';
 
 class AdminManageStudentsScreen extends StatefulWidget {
   const AdminManageStudentsScreen({super.key});
@@ -522,6 +523,8 @@ class _AdminManageStudentsScreenState extends State<AdminManageStudentsScreen> {
             const SizedBox(height: 8),
             Text('البريد: ${item['email'] ?? ''}',
                 style: const TextStyle(fontSize: 13)),
+            Text('العنوان: ${item['address'] ?? ''}',
+                style: const TextStyle(fontSize: 13)),
             Text(
                 'المُقرئ: ${item['teacher_name'] ?? 'غير مرتبط'}',
                 style: const TextStyle(fontSize: 13)),
@@ -623,6 +626,7 @@ class _AdminManageStudentsScreenState extends State<AdminManageStudentsScreen> {
             ),
             const SizedBox(height: 6),
             Text('البريد: ${item['email'] ?? ''}'),
+            Text('العنوان: ${item['address'] ?? ''}'),
             Text('المستوى: ${AppLabels.level(item['level']?.toString())}'),
             Text(
               'القراءة: ${AppLabels.qiraa(item['reading_type']?.toString())}',
@@ -684,16 +688,7 @@ class _AdminManageStudentsScreenState extends State<AdminManageStudentsScreen> {
 
     if (_error != null) {
       return Scaffold(
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Text(
-              _error!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.red),
-            ),
-          ),
-        ),
+        body: ErrorRetryView(message: _error!, onRetry: _loadData),
       );
     }
 

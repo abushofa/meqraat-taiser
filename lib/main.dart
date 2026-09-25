@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'core/config/app_config.dart';
+import 'core/network/api_client.dart';
 import 'core/notifications/notification_navigation_service.dart';
 import 'core/notifications/push_notification_service.dart';
 import 'core/theme/app_theme.dart';
@@ -30,8 +31,39 @@ Future<void> main() async {
   runApp(const QuranApp());
 }
 
-class QuranApp extends StatelessWidget {
+class QuranApp extends StatefulWidget {
   const QuranApp({super.key});
+
+  @override
+  State<QuranApp> createState() => _QuranAppState();
+}
+
+class _QuranAppState extends State<QuranApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      _notifyAppClose();
+    }
+  }
+
+  Future<void> _notifyAppClose() async {
+    try {
+      final dio = await ApiClient.getInstance();
+      await dio.post('/app_close.php');
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {

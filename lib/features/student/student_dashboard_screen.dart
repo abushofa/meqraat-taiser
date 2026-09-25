@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../core/network/api_client.dart';
@@ -8,6 +9,7 @@ import '../../core/widgets/day_picker_widget.dart';
 import '../call/agora_call_screen.dart';
 
 import '../../core/utils/update_checker.dart';
+import '../../core/widgets/error_retry_view.dart';
 
 class StudentDashboardScreen extends StatefulWidget {
   const StudentDashboardScreen({super.key});
@@ -227,7 +229,11 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
       if (!mounted) return;
       AppSnackBar.error(
         context,
-        e.toString().replaceFirst('Exception: ', ''),
+        e is DioException
+            ? (e.response?.data is Map
+                ? e.response!.data['message']?.toString()
+                : null) ?? e.message ?? 'تعذر الاتصال بالخادم'
+            : e.toString().replaceFirst('Exception: ', ''),
       );
     } finally {
       if (mounted) {
@@ -368,7 +374,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
     if (_error != null) {
       return Scaffold(
         appBar: AppBar(title: const Text('لوحة الطالب')),
-        body: Center(child: Text(_error!)),
+        body: ErrorRetryView(message: _error!, onRetry: _loadDashboard),
       );
     }
 

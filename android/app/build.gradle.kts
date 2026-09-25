@@ -29,7 +29,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.abushofa.quran_app"
+        applicationId = "com.abushofa.quranApp"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

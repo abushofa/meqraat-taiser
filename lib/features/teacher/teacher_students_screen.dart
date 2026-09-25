@@ -7,6 +7,7 @@ import '../../core/network/api_client.dart';
 import '../../core/utils/app_labels.dart';
 import '../../core/widgets/app_dialogs.dart';
 import '../../core/ui/app_snackbar.dart';
+import '../../core/widgets/error_retry_view.dart';
 
 class TeacherStudentsScreen extends StatefulWidget {
   const TeacherStudentsScreen({super.key});
@@ -321,16 +322,7 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen> {
     }
 
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Text(
-            _error!,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.red),
-          ),
-        ),
-      );
+      return ErrorRetryView(message: _error!, onRetry: _loadStudents);
     }
 
     return RefreshIndicator(

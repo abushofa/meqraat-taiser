@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../../core/network/api_client.dart';
+import '../../core/widgets/error_retry_view.dart';
 
 class StudentSessionsScreen extends StatefulWidget {
   const StudentSessionsScreen({super.key});
@@ -106,16 +107,7 @@ class _StudentSessionsScreenState extends State<StudentSessionsScreen> {
     }
 
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Text(
-            _error!,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.red),
-          ),
-        ),
-      );
+      return ErrorRetryView(message: _error!, onRetry: _loadSessions);
     }
 
     return RefreshIndicator(

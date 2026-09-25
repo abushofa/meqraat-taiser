@@ -4,6 +4,7 @@ import 'package:quran_app/core/storage/session_storage.dart';
 
 import '../../core/network/api_client.dart';
 import '../../core/notifications/notification_navigation_service.dart';
+import '../../core/widgets/delete_account_dialog.dart';
 import '../about/about_screen.dart';
 import '../about/help_screen.dart';
 import '../auth/login_screen.dart';
@@ -72,9 +73,7 @@ class _TeacherHomeShellState extends State<TeacherHomeShell> {
         '/logout.php',
         options: Options(contentType: Headers.formUrlEncodedContentType),
       );
-      try {
-        await FirebaseMessaging.instance.deleteToken();
-      } catch (_) {}
+      // لا نحذف رمز FCM: يبقى تذكير الجلسات ودخول الطلاب ورسائلهم يصل بعد الخروج
     } catch (_) {}
 
     await SessionStorage.clear();
@@ -96,6 +95,36 @@ class _TeacherHomeShellState extends State<TeacherHomeShell> {
       Navigator.push(
           context, MaterialPageRoute(builder: (_) => const AboutScreen()));
     }
+  }
+
+  Future<void> _showDeleteAccountConfirm() async {
+    final result = await showDialog<(String, String)>(
+      context: context,
+      builder: (_) => const DeleteAccountDialog(),
+    );
+    if (result != null && mounted) {
+      _deleteAccount(reason: result.$1, comment: result.$2);
+    }
+  }
+
+  Future<void> _deleteAccount({
+    required String reason,
+    String comment = '',
+  }) async {
+    try {
+      final dio = await ApiClient.getInstance();
+      await dio.post('/delete_account.php',
+          data: {'reason': reason, 'comment': comment});
+    } catch (_) {}
+    try {
+      await FirebaseMessaging.instance.deleteToken();
+    } catch (_) {}
+    await SessionStorage.clear();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
   }
 
   @override
@@ -146,11 +175,39 @@ class _TeacherHomeShellState extends State<TeacherHomeShell> {
         actions: [
           Padding(
             padding: const EdgeInsetsDirectional.only(end: 12),
-            child: GestureDetector(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ProfileScreen()),
-              ),
+            child: PopupMenuButton<String>(
+              tooltip: 'تعديل الحساب',
+              offset: const Offset(0, 48),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
+              onSelected: (value) {
+                if (value == 'profile') {
+                  Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => const ProfileScreen()));
+                } else if (value == 'delete_account') {
+                  _showDeleteAccountConfirm();
+                }
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem<String>(
+                  value: 'profile',
+                  child: Row(children: [
+                    Icon(Icons.person_outline),
+                    SizedBox(width: 10),
+                    Text('تعديل الحساب'),
+                  ]),
+                ),
+                PopupMenuDivider(),
+                PopupMenuItem<String>(
+                  value: 'delete_account',
+                  child: Row(children: [
+                    Icon(Icons.delete_outline, color: Colors.red),
+                    SizedBox(width: 10),
+                    Text('حذف الحساب',
+                        style: TextStyle(color: Colors.red)),
+                  ]),
+                ),
+              ],
               child: const CircleAvatar(
                 radius: 17,
                 backgroundColor: Color(0xFF0F766E),

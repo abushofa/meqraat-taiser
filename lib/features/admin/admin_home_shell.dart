@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/network/api_client.dart';
 import '../../core/notifications/notification_navigation_service.dart';
+import '../../core/services/app_settings_service.dart';
 import '../../core/ui/app_snackbar.dart';
 import '../auth/login_screen.dart';
 import '../about/about_screen.dart';
@@ -35,13 +36,19 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
   bool _spOriginal = false;
   int _maxSessionDays = 3;
   int _maxSessionDaysOriginal = 3;
+  bool _schoolFullEnabled = true;
+  bool _schoolFullEnabledOriginal = true;
+  int _schoolFullWaitMonths = 2;
+  int _schoolFullWaitMonthsOriginal = 2;
   bool _drawerLoading = false;
   bool _drawerSaving = false;
 
   bool get _settingsChanged =>
       _evEnabled != _evOriginal ||
       _spEnabled != _spOriginal ||
-      _maxSessionDays != _maxSessionDaysOriginal;
+      _maxSessionDays != _maxSessionDaysOriginal ||
+      _schoolFullEnabled != _schoolFullEnabledOriginal ||
+      _schoolFullWaitMonths != _schoolFullWaitMonthsOriginal;
 
   late final List<Widget> _pages = [
     const AdminDashboardScreen(),
@@ -148,9 +155,14 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
           _spEnabled = data['strong_password_enabled'] == true;
           _maxSessionDays =
               (data['max_session_days'] as num?)?.toInt() ?? 3;
+          _schoolFullEnabled = data['school_full_enabled'] == true;
+          _schoolFullWaitMonths =
+              (data['school_full_wait_months'] as num?)?.toInt() ?? 2;
           _evOriginal = _evEnabled;
           _spOriginal = _spEnabled;
           _maxSessionDaysOriginal = _maxSessionDays;
+          _schoolFullEnabledOriginal = _schoolFullEnabled;
+          _schoolFullWaitMonthsOriginal = _schoolFullWaitMonths;
         });
       }
     } catch (_) {}
@@ -166,9 +178,12 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
         'email_verification_enabled': _evEnabled,
         'strong_password_enabled': _spEnabled,
         'max_session_days': _maxSessionDays,
+        'school_full_enabled': _schoolFullEnabled,
+        'school_full_wait_months': _schoolFullWaitMonths,
       });
       final body = res.data;
       if (body is Map && body['ok'] == true) {
+        AppSettingsService.reset();
         _scaffoldKey.currentState?.closeDrawer();
         if (mounted) AppSnackBar.info(context, 'تم حفظ الإعدادات.');
       }
@@ -281,6 +296,85 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
                                   onPressed: _maxSessionDays < 5
                                       ? () => setState(
                                           () => _maxSessionDays++)
+                                      : null,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Card(
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      child: Column(
+                        children: [
+                          SwitchListTile(
+                            value: _schoolFullEnabled,
+                            onChanged: (v) =>
+                                setState(() => _schoolFullEnabled = v),
+                            title: const Text('تنبيه امتلاء المقرأة'),
+                            subtitle: const Text(
+                                'إظهار تنبيه بامتلاء المقرأة عند بدء تسجيل طالب جديد',
+                                style: TextStyle(fontSize: 12)),
+                            secondary: const Icon(Icons.hourglass_top,
+                                color: Colors.teal),
+                            activeThumbColor: Colors.teal,
+                          ),
+                          const Divider(height: 1),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 12),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.calendar_today_outlined,
+                                    color: Colors.teal),
+                                const SizedBox(width: 12),
+                                const Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text('مدة الانتظار (بالأشهر)'),
+                                      Text(
+                                        'تُستخدم لوضع الطالب مباشرة في قائمة الانتظار (1–12)',
+                                        style: TextStyle(
+                                            fontSize: 12, color: Colors.grey),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                      Icons.remove_circle_outline),
+                                  color: _schoolFullEnabled &&
+                                          _schoolFullWaitMonths > 1
+                                      ? Colors.teal
+                                      : Colors.grey,
+                                  onPressed: _schoolFullEnabled &&
+                                          _schoolFullWaitMonths > 1
+                                      ? () => setState(
+                                          () => _schoolFullWaitMonths--)
+                                      : null,
+                                ),
+                                Text(
+                                  '$_schoolFullWaitMonths',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.add_circle_outline),
+                                  color: _schoolFullEnabled &&
+                                          _schoolFullWaitMonths < 12
+                                      ? Colors.teal
+                                      : Colors.grey,
+                                  onPressed: _schoolFullEnabled &&
+                                          _schoolFullWaitMonths < 12
+                                      ? () => setState(
+                                          () => _schoolFullWaitMonths++)
                                       : null,
                                 ),
                               ],

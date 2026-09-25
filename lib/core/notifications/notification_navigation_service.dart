@@ -11,6 +11,7 @@ class NotificationNavigationService {
   static void openStudentSessions() => studentTabToOpen.value = 1;
   static void clearStudentTab()     => studentTabToOpen.value = null;
 
+  static void openTeacherDashboard() => teacherTabToOpen.value = 0;
   static void openTeacherMessages() => teacherTabToOpen.value = 3;
   static void clearTeacherTab()     => teacherTabToOpen.value = null;
 

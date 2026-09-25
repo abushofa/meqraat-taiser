@@ -5,6 +5,7 @@ import '../../core/services/app_settings_service.dart';
 import '../../core/utils/app_labels.dart';
 import '../../core/widgets/password_strength_indicator.dart';
 import '../../core/widgets/day_picker_widget.dart';
+import '../../core/widgets/period_times_card.dart';
 import 'verify_email_screen.dart';
 
 class StudentRegisterScreen extends StatefulWidget {
@@ -400,6 +401,8 @@ class _StudentRegisterScreenState extends State<StudentRegisterScreen> {
                           }
                         },
                       ),
+                      const SizedBox(height: 8),
+                      PeriodTimesCard(selectedPeriod: _preferredPeriod),
                       const SizedBox(height: 16),
 
                       // اختيار أيام الجلسات

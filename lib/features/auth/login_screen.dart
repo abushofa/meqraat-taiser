@@ -2,14 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 
 import '../../core/network/api_client.dart';
+import '../../core/services/app_settings_service.dart';
+import '../../core/widgets/app_dialogs.dart';
 import '../student/student_home_shell.dart';
 import '../teacher/teacher_home_shell.dart';
 import '../admin/admin_home_shell.dart';
 import 'student_register_screen.dart';
 import 'teacher_register_screen.dart';
+import 'verify_email_screen.dart';
 import '../../core/storage/session_storage.dart';
 import '../../core/notifications/push_notification_service.dart';
 import '../../core/utils/device_info_helper.dart';
+import '../../core/utils/battery_optimization_helper.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -24,6 +28,7 @@ class _LoginScreenState extends State<LoginScreen>
   final _passwordController = TextEditingController();
 
   bool _loading = false;
+  bool _checkingSchoolFull = false;
   String? _error;
   String? _success;
 
@@ -148,6 +153,9 @@ class _LoginScreenState extends State<LoginScreen>
 
         if (!mounted) return;
 
+        await BatteryOptimizationHelper.checkAndPrompt(context);
+        if (!mounted) return;
+
         if (role == 'student') {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (_) => const StudentHomeShell()),
@@ -187,6 +195,29 @@ class _LoginScreenState extends State<LoginScreen>
         if (mounted) {
           setState(() => _loading = false);
           _showAlreadyLoggedInDialog(otherDevice);
+        }
+        return;
+      }
+
+      // الحساب لم يُكمل التحقق من البريد الإلكتروني بعد
+      if (e.response?.statusCode == 403 &&
+          e.response?.data is Map &&
+          e.response!.data['error']?['needs_verification'] == true) {
+        final errorData = e.response!.data['error'] as Map;
+        final userId = errorData['user_id'] as int? ?? 0;
+        final verifyEmail = errorData['email']?.toString() ?? email;
+        final verifyName = errorData['name']?.toString() ?? '';
+        if (mounted) {
+          setState(() => _loading = false);
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => VerifyEmailScreen(
+                userId: userId,
+                email: verifyEmail,
+                name: verifyName,
+              ),
+            ),
+          );
         }
         return;
       }
@@ -255,7 +286,41 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
+  String _waitMonthsText(int months) {
+    final String word;
+    if (months == 1) {
+      word = 'شهر';
+    } else if (months == 2) {
+      word = 'شهران';
+    } else if (months <= 10) {
+      word = '$months أشهر';
+    } else {
+      word = '$months شهر';
+    }
+    return '$word أو يزيد';
+  }
+
   Future<void> _goToStudentRegister() async {
+    setState(() => _checkingSchoolFull = true);
+    await AppSettingsService.load();
+    if (!mounted) return;
+    setState(() => _checkingSchoolFull = false);
+
+    if (AppSettingsService.schoolFullEnabled) {
+      final months = AppSettingsService.schoolFullWaitMonths;
+      final continueAnyway = await AppDialogs.showConfirm(
+        context: context,
+        title: 'تنبيه',
+        message:
+            'المقرأة الآن ممتلئة بالكامل، ومدة الانتظار قد تصل إلى ${_waitMonthsText(months)}.',
+        confirmText: 'استمرار',
+        cancelText: 'توقف',
+        icon: Icons.hourglass_top,
+        iconColor: Colors.orange,
+      );
+      if (!mounted || !continueAnyway) return;
+    }
+
     final result = await Navigator.of(context).push<String>(
       MaterialPageRoute(builder: (_) => const StudentRegisterScreen()),
     );
@@ -305,7 +370,6 @@ class _LoginScreenState extends State<LoginScreen>
         title: const Text('تسجيل الدخول'),
         centerTitle: true,
       ),
-      backgroundColor: const Color(0xFFF6F8FB),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
@@ -454,7 +518,9 @@ class _LoginScreenState extends State<LoginScreen>
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
-                            onPressed: _loading ? null : _login,
+                            onPressed: (_loading || _checkingSchoolFull)
+                                ? null
+                                : _login,
                             child: _loading
                                 ? const SizedBox(
                                     width: 20,
@@ -481,8 +547,18 @@ class _LoginScreenState extends State<LoginScreen>
                         SizedBox(
                           width: double.infinity,
                           child: OutlinedButton.icon(
-                            onPressed: _loading ? null : _goToStudentRegister,
-                            icon: const Icon(Icons.school_outlined),
+                            onPressed: (_loading || _checkingSchoolFull)
+                                ? null
+                                : _goToStudentRegister,
+                            icon: _checkingSchoolFull
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.school_outlined),
                             label: const Text('تسجيل طالب جديد'),
                           ),
                         ),
@@ -492,7 +568,9 @@ class _LoginScreenState extends State<LoginScreen>
                         SizedBox(
                           width: double.infinity,
                           child: OutlinedButton.icon(
-                            onPressed: _loading ? null : _goToTeacherRegister,
+                            onPressed: (_loading || _checkingSchoolFull)
+                                ? null
+                                : _goToTeacherRegister,
                             icon: const Icon(Icons.record_voice_over_outlined),
                             label: const Text('التسجيل كمُقرئ'),
                           ),

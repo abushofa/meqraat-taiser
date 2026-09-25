@@ -6,6 +6,7 @@ import '../../core/utils/admin_refresh_notifier.dart';
 import '../../core/network/api_client.dart';
 import '../../core/ui/app_snackbar.dart';
 import '../../core/widgets/app_dialogs.dart';
+import '../../core/widgets/error_retry_view.dart';
 
 class AdminDeletedUsersScreen extends StatefulWidget {
   const AdminDeletedUsersScreen({super.key});
@@ -252,7 +253,9 @@ class _AdminDeletedUsersScreenState extends State<AdminDeletedUsersScreen> {
     }
 
     if (_error != null) {
-      return Scaffold(body: Center(child: Text(_error!)));
+      return Scaffold(
+        body: ErrorRetryView(message: _error!, onRetry: _loadDeletedUsers),
+      );
     }
 
     return Scaffold(

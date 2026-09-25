@@ -6,6 +6,7 @@ import '../../core/utils/app_labels.dart';
 import '../../core/widgets/app_dialogs.dart';
 import '../../core/ui/app_snackbar.dart';
 import 'dart:async';
+import '../../core/widgets/error_retry_view.dart';
 import '../../core/utils/admin_refresh_notifier.dart'; // ✅ جديد
 
 class AdminAssignmentsScreen extends StatefulWidget {
@@ -426,16 +427,7 @@ class _AdminAssignmentsScreenState extends State<AdminAssignmentsScreen> {
 
     if (_error != null) {
       return Scaffold(
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Text(
-              _error!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.red),
-            ),
-          ),
-        ),
+        body: ErrorRetryView(message: _error!, onRetry: _loadData),
       );
     }
 

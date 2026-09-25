@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../../core/network/api_client.dart';
+import '../../core/widgets/error_retry_view.dart';
 
 class AdminReportsScreen extends StatefulWidget {
   const AdminReportsScreen({super.key});
@@ -118,16 +119,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
     }
 
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Text(
-            _error!,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.red),
-          ),
-        ),
-      );
+      return ErrorRetryView(message: _error!, onRetry: _loadReports);
     }
 
     final attendanceStats = _data?['attendance_stats'] as Map<String, dynamic>?;

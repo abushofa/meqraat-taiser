@@ -7,6 +7,7 @@ import '../../core/network/api_client.dart';
 import '../../core/utils/app_labels.dart';
 import '../../core/widgets/app_dialogs.dart';
 import '../../core/ui/app_snackbar.dart';
+import '../../core/widgets/error_retry_view.dart';
 
 class AdminPendingRequestsScreen extends StatefulWidget {
   const AdminPendingRequestsScreen({super.key});
@@ -434,6 +435,7 @@ class _AdminPendingRequestsScreenState
             ),
             const SizedBox(height: 6),
             Text('البريد: ${item['email'] ?? ''}'),
+            Text('العنوان: ${item['address'] ?? ''}'),
             Text('المستوى: ${AppLabels.level(item['level']?.toString())}'),
             Text(
               'القراءة: ${AppLabels.qiraa(item['reading_type']?.toString())}',
@@ -470,6 +472,7 @@ class _AdminPendingRequestsScreenState
             ),
             const SizedBox(height: 6),
             Text('البريد: ${item['email'] ?? ''}'),
+            Text('العنوان: ${item['address'] ?? ''}'),
             Text('القراءات: ${AppLabels.qiraatText(item['readings'])}'),
             Text(
               'فترات التوفر: ${AppLabels.periodsText(item['available_periods'])}',
@@ -494,16 +497,7 @@ class _AdminPendingRequestsScreenState
     }
 
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Text(
-            _error!,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.red),
-          ),
-        ),
-      );
+      return ErrorRetryView(message: _error!, onRetry: _loadPendingRequests);
     }
 
     return RefreshIndicator(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/network/api_client.dart';
 import '../../core/widgets/day_picker_widget.dart';
+import '../../core/widgets/error_retry_view.dart';
 
 class TeacherScheduleScreen extends StatefulWidget {
   const TeacherScheduleScreen({super.key});
@@ -120,17 +121,7 @@ class _TeacherScheduleScreenState extends State<TeacherScheduleScreen> {
 
     if (_error != null) {
       return Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(_error!, style: const TextStyle(color: Colors.red)),
-              const SizedBox(height: 12),
-              ElevatedButton(
-                  onPressed: _loadSchedule, child: const Text('إعادة المحاولة')),
-            ],
-          ),
-        ),
+        body: ErrorRetryView(message: _error!, onRetry: _loadSchedule),
       );
     }
 

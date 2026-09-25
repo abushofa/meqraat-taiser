@@ -9,6 +9,7 @@ import '../../core/utils/app_labels.dart';
 import '../../core/widgets/status_badge.dart';
 import '../../core/utils/admin_refresh_notifier.dart';
 import '../../core/widgets/app_dialogs.dart';
+import '../../core/widgets/error_retry_view.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -451,16 +452,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     if (_error != null) {
       return Scaffold(
         appBar: AppBar(title: const Text('لوحة المشرف')),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Text(
-              _error!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.red, fontSize: 16),
-            ),
-          ),
-        ),
+        body: ErrorRetryView(message: _error!, onRetry: _loadDashboard),
       );
     }
 

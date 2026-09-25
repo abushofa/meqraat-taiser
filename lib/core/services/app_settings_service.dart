@@ -4,6 +4,8 @@ class AppSettingsService {
   static bool emailVerificationEnabled = false;
   static bool strongPasswordEnabled = false;
   static int maxSessionDays = 3;
+  static bool schoolFullEnabled = true;
+  static int schoolFullWaitMonths = 2;
   static bool _loaded = false;
 
   static Future<void> load() async {
@@ -17,6 +19,9 @@ class AppSettingsService {
         emailVerificationEnabled = data['email_verification_enabled'] == true;
         strongPasswordEnabled = data['strong_password_enabled'] == true;
         maxSessionDays = (data['max_session_days'] as num?)?.toInt() ?? 3;
+        schoolFullEnabled = data['school_full_enabled'] == true;
+        schoolFullWaitMonths =
+            (data['school_full_wait_months'] as num?)?.toInt() ?? 2;
         _loaded = true;
       }
     } catch (_) {}

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/network/api_client.dart';
 import '../../core/ui/app_snackbar.dart';
 import '../../core/widgets/reply_message_sheet.dart';
+import '../../core/widgets/error_retry_view.dart';
 
 class StudentMessagesScreen extends StatefulWidget {
   const StudentMessagesScreen({super.key});
@@ -168,14 +169,7 @@ class _StudentMessagesScreenState extends State<StudentMessagesScreen> {
     if (_loading) return const Center(child: CircularProgressIndicator());
 
     if (_error != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Text(_error!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.red)),
-        ),
-      );
+      return ErrorRetryView(message: _error!, onRetry: _loadMessages);
     }
 
     return Scaffold(

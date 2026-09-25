@@ -11,6 +11,7 @@ import '../../core/ui/app_snackbar.dart';
 import '../call/agora_call_screen.dart';
 
 import '../../core/utils/update_checker.dart';
+import '../../core/widgets/error_retry_view.dart';
 
 class TeacherDashboardScreen extends StatefulWidget {
   const TeacherDashboardScreen({super.key});
@@ -493,16 +494,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     if (_error != null) {
       return Scaffold(
         appBar: AppBar(title: const Text('لوحة المُقرئ')),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Text(
-              _error!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.red, fontSize: 16),
-            ),
-          ),
-        ),
+        body: ErrorRetryView(message: _error!, onRetry: _loadDashboard),
       );
     }
 

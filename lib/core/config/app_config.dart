@@ -4,6 +4,5 @@ class AppConfig {
   // غيّره لاحقًا إذا تغيّر الدومين أو المسار
   static const String baseUrl = 'https://taiser.net/Quran/api';
 
-  // مؤقتًا — يحتاج حساب Apple Developer مدفوع لتفعيل APNs
-  static const bool enablePushOnIOS = false;
+  static const bool enablePushOnIOS = true;
 }

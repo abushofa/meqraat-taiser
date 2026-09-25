@@ -56,6 +56,9 @@ class AboutScreen extends StatelessWidget {
             _infoRow(Icons.code_outlined, 'التطوير', 'فريق مقرأة التيسير'),
             const Divider(height: 1),
             _linkRow(Icons.language_outlined, 'الموقع', 'https://www.taiser.net'),
+            const Divider(height: 1),
+            _linkRow(Icons.privacy_tip_outlined, 'سياسة الخصوصية',
+                'https://abushofa.github.io/meqraat-taiser/privacy_policy_ar.html'),
           ]),
           const SizedBox(height: 12),
           _infoCard([

@@ -5,6 +5,7 @@ import '../../core/utils/app_labels.dart';
 import 'dart:async';
 import '../../core/utils/admin_refresh_notifier.dart';
 import '../../core/ui/app_snackbar.dart';
+import '../../core/widgets/error_retry_view.dart';
 
 class AdminDirectoryScreen extends StatefulWidget {
   const AdminDirectoryScreen({super.key});
@@ -308,6 +309,7 @@ class _AdminDirectoryScreenState extends State<AdminDirectoryScreen>
               ),
               const SizedBox(height: 6),
               Text('البريد: ${item['email']}'),
+              Text('العنوان: ${item['address'] ?? ''}'),
               Text('المستوى: ${AppLabels.level(item['level']?.toString())}'),
               Text(
                 'القراءة: ${AppLabels.qiraa(item['reading_type']?.toString())}',
@@ -341,6 +343,7 @@ class _AdminDirectoryScreenState extends State<AdminDirectoryScreen>
               ),
               const SizedBox(height: 6),
               Text('البريد: ${item['email']}'),
+              Text('العنوان: ${item['address'] ?? ''}'),
               Text('القراءات: ${AppLabels.qiraatText(item['readings'])}'),
               Text(
                 'الفترات: ${AppLabels.periodsText(item['available_periods'])}',
@@ -422,7 +425,7 @@ class _AdminDirectoryScreenState extends State<AdminDirectoryScreen>
     }
 
     if (_error != null) {
-      return Center(child: Text(_error!));
+      return ErrorRetryView(message: _error!, onRetry: _loadData);
     }
 
     return Column(

@@ -31,6 +31,7 @@ class ApiClient {
 
     dio.interceptors.add(CookieManager(cookieJar));
     dio.interceptors.add(_RemoteLogoutInterceptor());
+    dio.interceptors.add(_FriendlyNetworkErrorInterceptor());
 
     _dio = dio;
     return dio;
@@ -65,6 +66,30 @@ class _RemoteLogoutDialog extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+/// يستبدل رسائل أخطاء الشبكة الخام (مثل Failed host lookup) برسالة عربية واضحة،
+/// فتعرضها كل الشاشات التي تستخدم e.message دون تعديل فيها.
+class _FriendlyNetworkErrorInterceptor extends Interceptor {
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) {
+    // خطأ وصل من الخادم نفسه: نتركه كما هو
+    if (err.response != null) return handler.next(err);
+
+    final String message;
+    switch (err.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+        message = 'الاتصال بالخادم بطيء جداً. تحقق من الإنترنت ثم حاول مجدداً.';
+        break;
+      case DioExceptionType.cancel:
+        return handler.next(err);
+      default:
+        message = 'تعذر الاتصال بالخادم. تحقق من اتصالك بالإنترنت ثم حاول مجدداً.';
+    }
+    handler.next(err.copyWith(message: message));
   }
 }
 
