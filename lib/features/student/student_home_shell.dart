@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:quran_app/core/storage/session_storage.dart';
@@ -29,6 +30,7 @@ class _StudentHomeShellState extends State<StudentHomeShell>
     with WidgetsBindingObserver {
   late int _currentIndex;
   DateTime? _lastPresenceAt;
+  Timer? _presenceTimer;
 
   // الترتيب الجديد: الرئيسية | الرسائل | الجلسات | الملاحظات
   final List<Widget> _screens = const [
@@ -53,10 +55,18 @@ class _StudentHomeShellState extends State<StudentHomeShell>
         .addListener(_onTabRequested);
     WidgetsBinding.instance.addObserver(this);
     _reportPresence();
+    // من يفتح التطبيق مبكرًا ويبقى فيه يُحتسب حين تبدأ نافذة الجلسة
+    _presenceTimer = Timer.periodic(const Duration(minutes: 2), (_) {
+      if (WidgetsBinding.instance.lifecycleState ==
+          AppLifecycleState.resumed) {
+        _reportPresence();
+      }
+    });
   }
 
   @override
   void dispose() {
+    _presenceTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     NotificationNavigationService.studentTabToOpen
         .removeListener(_onTabRequested);
@@ -72,7 +82,7 @@ class _StudentHomeShellState extends State<StudentHomeShell>
   Future<void> _reportPresence() async {
     final now = DateTime.now();
     if (_lastPresenceAt != null &&
-        now.difference(_lastPresenceAt!) < const Duration(minutes: 2)) {
+        now.difference(_lastPresenceAt!) < const Duration(seconds: 90)) {
       return;
     }
     _lastPresenceAt = now;
