@@ -24,8 +24,10 @@ class TeacherHomeShell extends StatefulWidget {
   State<TeacherHomeShell> createState() => _TeacherHomeShellState();
 }
 
-class _TeacherHomeShellState extends State<TeacherHomeShell> {
+class _TeacherHomeShellState extends State<TeacherHomeShell>
+    with WidgetsBindingObserver {
   int _currentIndex = 0;
+  DateTime? _lastPresenceAt;
 
   // الترتيب: الرئيسية | الطلاب | الرسائل | الجلسات | الجدول
   final List<Widget> _pages = const [
@@ -48,13 +50,35 @@ class _TeacherHomeShellState extends State<TeacherHomeShell> {
   void initState() {
     super.initState();
     NotificationNavigationService.teacherTabToOpen.addListener(_onTabRequested);
+    WidgetsBinding.instance.addObserver(this);
+    _reportPresence();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     NotificationNavigationService.teacherTabToOpen
         .removeListener(_onTabRequested);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _reportPresence();
+  }
+
+  // يسجّل دخول المقريء في وقت جلسته حتى يُبلَّغ الطالب المتأخر بوجوده — السيرفر يقرر ويمنع التكرار
+  Future<void> _reportPresence() async {
+    final now = DateTime.now();
+    if (_lastPresenceAt != null &&
+        now.difference(_lastPresenceAt!) < const Duration(minutes: 2)) {
+      return;
+    }
+    _lastPresenceAt = now;
+    try {
+      final dio = await ApiClient.getInstance();
+      await dio.post('/teacher/presence.php');
+    } catch (_) {}
   }
 
   void _onTabRequested() {
