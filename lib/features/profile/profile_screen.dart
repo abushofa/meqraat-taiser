@@ -89,60 +89,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   bool _canEdit(String role) => role == 'student' || role == 'teacher';
 
-  bool _savingReminders = false;
-
-  Future<void> _setSessionReminders(bool enabled) async {
-    final user = _data?['user'] as Map<String, dynamic>?;
-    if (user == null || _savingReminders) return;
-
-    final previous = user['session_reminders'] != false;
-    setState(() {
-      _savingReminders = true;
-      user['session_reminders'] = enabled;
-    });
-
-    try {
-      final dio = await ApiClient.getInstance();
-      final response = await dio.post(
-        '/notifications/reminder_setting.php',
-        data: {'enabled': enabled},
-      );
-      final body = response.data;
-      if (body is! Map || body['ok'] != true) throw Exception();
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => user['session_reminders'] = previous);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('تعذر حفظ الإعداد، حاول مرة أخرى')),
-      );
-    } finally {
-      if (mounted) setState(() => _savingReminders = false);
-    }
-  }
-
-  Widget _remindersSection(String role, Map<String, dynamic>? user) {
-    return _sectionCard(
-      title: 'التنبيهات',
-      icon: Icons.notifications_outlined,
-      children: [
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text(
-            'تذكير مواعيد الجلسات',
-            style: TextStyle(fontWeight: FontWeight.w700),
-          ),
-          subtitle: Text(
-            role == 'teacher'
-                ? 'تنبيه عند حلول وقت الجلسة وعند دخول كل طالب'
-                : 'تنبيه عند حلول وقت جلستك',
-          ),
-          value: user?['session_reminders'] != false,
-          onChanged: _savingReminders ? null : _setSessionReminders,
-        ),
-      ],
-    );
-  }
-
   Future<void> _openEditProfile() async {
     final user = _data?['user'] as Map<String, dynamic>?;
     final extra = _data?['extra'] as Map<String, dynamic>?;
@@ -354,10 +300,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         icon: Icons.badge_outlined,
                         children: _buildExtraSection(role, extra),
                       ),
-                      if (_canEdit(role)) ...[
-                        const SizedBox(height: 16),
-                        _remindersSection(role, user),
-                      ],
                       if (_canEdit(role)) ...[
                         const SizedBox(height: 16),
                         SizedBox(

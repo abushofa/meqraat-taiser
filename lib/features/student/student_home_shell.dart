@@ -9,6 +9,7 @@ import '../../core/network/api_client.dart';
 import '../../core/widgets/delete_account_dialog.dart';
 import '../about/about_screen.dart';
 import '../about/help_screen.dart';
+import '../settings/settings_screen.dart';
 import '../auth/login_screen.dart';
 import '../profile/profile_screen.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -134,6 +135,9 @@ class _StudentHomeShellState extends State<StudentHomeShell>
     } else if (value == 'help') {
       Navigator.push(
           context, MaterialPageRoute(builder: (_) => const HelpScreen()));
+    } else if (value == 'settings') {
+      Navigator.push(
+          context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
     } else if (value == 'about') {
       Navigator.push(
           context, MaterialPageRoute(builder: (_) => const AboutScreen()));
@@ -196,6 +200,14 @@ class _StudentHomeShellState extends State<StudentHomeShell>
                 Icon(Icons.info_outline),
                 SizedBox(width: 10),
                 Text('حول التطبيق'),
+              ]),
+            ),
+            PopupMenuItem<String>(
+              value: 'settings',
+              child: Row(children: [
+                Icon(Icons.settings_outlined),
+                SizedBox(width: 10),
+                Text('الإعدادات'),
               ]),
             ),
             PopupMenuDivider(),
