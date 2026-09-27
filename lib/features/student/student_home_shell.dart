@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:quran_app/core/storage/session_storage.dart';
 
 import '../../core/notifications/notification_navigation_service.dart';
+import '../../core/notifications/push_notification_service.dart';
 import '../../core/network/api_client.dart';
 import '../../core/widgets/delete_account_dialog.dart';
 import '../about/about_screen.dart';
@@ -88,6 +89,8 @@ class _StudentHomeShellState extends State<StudentHomeShell>
     _lastPresenceAt = now;
     try {
       final dio = await ApiClient.getInstance();
+      // بعد تسجيل الدخول مباشرة: ننتظر تسجيل الجهاز حتى يصل إشعار "المُقرئ موجود"
+      await PushNotificationService.tokenReady;
       await dio.post('/student/presence.php');
     } catch (_) {}
   }

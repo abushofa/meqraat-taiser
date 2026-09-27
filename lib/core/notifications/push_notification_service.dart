@@ -79,13 +79,23 @@ class PushNotificationService {
     }
   }
 
+  static Future<void>? _pendingRegistration;
+
+  // يكتمل حين يصل الـ token للسيرفر — ما يطلب push فورياً (كالإبلاغ بالحضور) ينتظره
+  // حتى لا يُرسل السيرفر لمستخدم لم يُسجَّل جهازه بعد
+  static Future<void> get tokenReady =>
+      (_pendingRegistration ?? Future<void>.value())
+          .timeout(const Duration(seconds: 20), onTimeout: () {});
+
   // يُستدعى مباشرة بعد تسجيل الدخول لضمان وصول الـ token للسيرفر
-  static Future<void> registerTokenAfterLogin() async {
-    try {
-      await _tryRegisterToken();
-    } catch (e) {
-      if (kDebugMode) debugPrint('registerTokenAfterLogin error: $e');
-    }
+  static Future<void> registerTokenAfterLogin() {
+    return _pendingRegistration = () async {
+      try {
+        await _tryRegisterToken();
+      } catch (e) {
+        if (kDebugMode) debugPrint('registerTokenAfterLogin error: $e');
+      }
+    }();
   }
 
   static Future<void> _initLocalNotificationsForAndroid() async {
@@ -122,6 +132,7 @@ class PushNotificationService {
 
     // إشعار مستقبَل والتطبيق مفتوح
     FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
+      debugPrint('[FCM onMessage] ${message.notification?.title} | ${message.data}');
       if (Platform.isAndroid) {
         // Android: نعرضه يدوياً عبر flutter_local_notifications بالقناة الصحيحة
         final channelId = _resolveChannelId(message.data);
