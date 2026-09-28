@@ -26,28 +26,32 @@ class PushNotificationService {
     importance: Importance.max,
   );
 
-  // قناة الجلسات الفردية — صوت الأذان (res/raw/athan.wav)
-  // معرّف جديد لأن Android لا يسمح بتغيير صوت قناة موجودة
+  // قنوات الجلسات — صوت الإشعارات الافتراضي للجهاز.
+  // منفصلة عن الرسائل حتى يختار المستخدم لها نغمة مختلفة من إعدادات النظام.
+  // معرّفات جديدة لأن Android لا يسمح بتغيير صوت قناة موجودة (القديمة كانت بصوت الأذان)
   static const AndroidNotificationChannel _individualSessionChannel =
       AndroidNotificationChannel(
-    'quran_sessions_athan_channel',
+    'quran_sessions_channel',
     'جلسات فردية',
     description: 'تنبيهات بدء الجلسات الفردية',
     importance: Importance.max,
-    sound: RawResourceAndroidNotificationSound('athan'),
     playSound: true,
   );
 
-  // قناة الجلسات الجماعية — صوت الأذان (نفس الصوت، قناة منفصلة للبيكند)
   static const AndroidNotificationChannel _groupSessionChannel =
       AndroidNotificationChannel(
-    'quran_group_sessions_athan_channel',
+    'quran_group_sessions_channel',
     'جلسات جماعية',
     description: 'تنبيهات بدء الجلسات الجماعية',
     importance: Importance.max,
-    sound: RawResourceAndroidNotificationSound('athan'),
     playSound: true,
   );
+
+  // قنوات الأذان القديمة — تُحذف من الأجهزة بعد التحديث
+  static const _oldChannelIds = [
+    'quran_sessions_athan_channel',
+    'quran_group_sessions_athan_channel',
+  ];
 
   static bool _initialized = false;
 
@@ -119,6 +123,9 @@ class PushNotificationService {
     await androidPlugin?.createNotificationChannel(_messagesChannel);
     await androidPlugin?.createNotificationChannel(_individualSessionChannel);
     await androidPlugin?.createNotificationChannel(_groupSessionChannel);
+    for (final id in _oldChannelIds) {
+      await androidPlugin?.deleteNotificationChannel(channelId: id);
+    }
   }
 
   static Future<void> _setupFirebaseListeners() async {
@@ -164,8 +171,8 @@ class PushNotificationService {
     if (type == 'session') {
       final sessionType = data['session_type']?.toString();
       return sessionType == 'group'
-          ? 'quran_group_sessions_athan_channel'
-          : 'quran_sessions_athan_channel';
+          ? _groupSessionChannel.id
+          : _individualSessionChannel.id;
     }
     return 'quran_messages_channel';
   }
@@ -228,9 +235,9 @@ class PushNotificationService {
 
   static String _channelDisplayName(String channelId) {
     switch (channelId) {
-      case 'quran_sessions_athan_channel':
+      case 'quran_sessions_channel':
         return 'جلسات فردية';
-      case 'quran_group_sessions_athan_channel':
+      case 'quran_group_sessions_channel':
         return 'جلسات جماعية';
       default:
         return 'رسائل القرآن';

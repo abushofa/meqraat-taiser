@@ -40,6 +40,8 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
   bool _schoolFullEnabledOriginal = true;
   int _schoolFullWaitMonths = 2;
   int _schoolFullWaitMonthsOriginal = 2;
+  int _studentReminderBefore = 5;
+  int _studentReminderBeforeOriginal = 5;
   bool _drawerLoading = false;
   bool _drawerSaving = false;
 
@@ -48,7 +50,8 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
       _spEnabled != _spOriginal ||
       _maxSessionDays != _maxSessionDaysOriginal ||
       _schoolFullEnabled != _schoolFullEnabledOriginal ||
-      _schoolFullWaitMonths != _schoolFullWaitMonthsOriginal;
+      _schoolFullWaitMonths != _schoolFullWaitMonthsOriginal ||
+      _studentReminderBefore != _studentReminderBeforeOriginal;
 
   late final List<Widget> _pages = [
     const AdminDashboardScreen(),
@@ -158,11 +161,14 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
           _schoolFullEnabled = data['school_full_enabled'] == true;
           _schoolFullWaitMonths =
               (data['school_full_wait_months'] as num?)?.toInt() ?? 2;
+          _studentReminderBefore =
+              (data['reminder_student_before_minutes'] as num?)?.toInt() ?? 5;
           _evOriginal = _evEnabled;
           _spOriginal = _spEnabled;
           _maxSessionDaysOriginal = _maxSessionDays;
           _schoolFullEnabledOriginal = _schoolFullEnabled;
           _schoolFullWaitMonthsOriginal = _schoolFullWaitMonths;
+          _studentReminderBeforeOriginal = _studentReminderBefore;
         });
       }
     } catch (_) {}
@@ -180,6 +186,7 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
         'max_session_days': _maxSessionDays,
         'school_full_enabled': _schoolFullEnabled,
         'school_full_wait_months': _schoolFullWaitMonths,
+        'reminder_student_before_minutes': _studentReminderBefore,
       });
       final body = res.data;
       if (body is Map && body['ok'] == true) {
@@ -381,6 +388,64 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
                             ),
                           ),
                         ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Card(
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.alarm_outlined,
+                                color: Colors.teal),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('تذكير الطالب قبل الجلسة'),
+                                  Text(
+                                    _studentReminderBefore == 0
+                                        ? 'عند بدء الجلسة (0–15 دقيقة)'
+                                        : 'بالدقائق قبل بدء الجلسة (0–15)',
+                                    style: const TextStyle(
+                                        fontSize: 12, color: Colors.grey),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.remove_circle_outline),
+                              color: _studentReminderBefore > 0
+                                  ? Colors.teal
+                                  : Colors.grey,
+                              onPressed: _studentReminderBefore > 0
+                                  ? () => setState(
+                                      () => _studentReminderBefore--)
+                                  : null,
+                            ),
+                            Text(
+                              '$_studentReminderBefore',
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.add_circle_outline),
+                              color: _studentReminderBefore < 15
+                                  ? Colors.teal
+                                  : Colors.grey,
+                              onPressed: _studentReminderBefore < 15
+                                  ? () => setState(
+                                      () => _studentReminderBefore++)
+                                  : null,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                     const SizedBox(height: 16),
