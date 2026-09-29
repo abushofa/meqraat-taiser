@@ -140,7 +140,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
     return true;
   }
 
-  Future<void> _openAgora(Map agora, String teacherName) async {
+  Future<void> _openAgora(Map agora, String teacherName, {int? focusUid}) async {
     final granted = await _ensurePermissions();
     if (!granted) return;
 
@@ -170,6 +170,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
           title: 'جلسة القراءة',
           displayName: teacherName,
           isTeacher: false,
+          focusUid: focusUid,
         ),
       ),
     );
@@ -217,7 +218,8 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
           throw Exception('لم تصل بيانات Agora للجلسة الجماعية');
         }
 
-        await _openAgora(Map<String, dynamic>.from(groupAgora), teacherName);
+        final teacherUid = agora is Map ? int.tryParse('${agora['teacher_uid'] ?? ''}') : null;
+        await _openAgora(Map<String, dynamic>.from(groupAgora), teacherName, focusUid: teacherUid);
       } else {
         if (agora is! Map) {
           throw Exception('بيانات Agora غير متوفرة');

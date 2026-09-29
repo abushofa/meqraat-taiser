@@ -41,6 +41,8 @@ class AgoraCallScreen extends StatefulWidget {
   final String displayName;
   final bool isTeacher;
   final bool isGroupSession;
+  // الطالب في الجلسة الجماعية: يرى فيديو المقرئ فقط، ويسمع الجميع
+  final int? focusUid;
   final Future<void> Function()? onEndSession;
   final int? sessionId;
 
@@ -54,6 +56,7 @@ class AgoraCallScreen extends StatefulWidget {
     required this.displayName,
     this.isTeacher = false,
     this.isGroupSession = false,
+    this.focusUid,
     this.onEndSession,
     this.sessionId,
   });
@@ -293,6 +296,8 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
     } catch (_) {}
   }
 
+  bool _isOutOfFocus(int uid) => widget.focusUid != null && uid != widget.focusUid;
+
   Future<void> _initAgora() async {
     await _requestBatteryOptimization();
     final appId = _sanitizeAppId(widget.appId);
@@ -381,6 +386,11 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
             if (!mounted) return;
             // ضمان تفعيل استقبال صوت الطرف الآخر صراحةً
             await _engine.muteRemoteAudioStream(uid: remoteUid, mute: false);
+            if (_isOutOfFocus(remoteUid)) {
+              // طالب آخر: نسمعه فقط، ولا نستقبل الفيديو الخاص به
+              await _engine.muteRemoteVideoStream(uid: remoteUid, mute: true);
+              return;
+            }
             await _setSpeakerOn();
             if (Platform.isIOS) {
               await Future.delayed(const Duration(milliseconds: 500));
@@ -419,6 +429,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
           },
           onUserOffline: (connection, remoteUid, reason) {
             if (!mounted) return;
+            if (_isOutOfFocus(remoteUid)) return;
             if (widget.isTeacher && widget.isGroupSession) {
               final name = _activeParticipants.remove(remoteUid);
               if (name != null) _leftParticipants.add(name);
@@ -479,7 +490,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
           },
           onActiveSpeaker: (connection, speakerUid) {
             if (!mounted) return;
-            if (speakerUid != 0) _markRemoteSpeaking();
+            if (speakerUid != 0 && !_isOutOfFocus(speakerUid)) _markRemoteSpeaking();
           },
           onAudioVolumeIndication: (connection, speakers, speakerNumber, totalVolume) {
             if (!mounted) return;
@@ -524,7 +535,10 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
         smooth: 3,
         reportVad: true,
       );
-      await _engine.disableVideo();
+      // وحدة الفيديو مفعّلة من البداية لاستقبال فيديو الآخرين حتى لو كانت كاميرتك مطفأة؛
+      // الكاميرا نفسها لا تعمل إلا عند الضغط على "تشغيل الفيديو"
+      await _engine.enableLocalVideo(false);
+      await _engine.enableVideo();
 
       if (!mounted) return;
       setState(() {
@@ -577,7 +591,11 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
       );
       final name = response.data?['data']?['name']?.toString();
       if (name != null && mounted) {
-        setState(() => _activeParticipants[uid] = name);
+        setState(() {
+          _activeParticipants[uid] = name;
+          // عاد الطالب بعد خروجه: لا يبقى في قائمة "غادر"
+          _leftParticipants.removeWhere((n) => n == name);
+        });
       }
     } catch (_) {}
   }
@@ -722,7 +740,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
     if (!_engineReady) return;
     final newValue = !_localVideoEnabled;
     if (newValue) {
-      await _engine.enableVideo();
+      await _engine.enableLocalVideo(true);
       await _engine.startPreview();
       await _engine.muteLocalVideoStream(false);
       await _engine.updateChannelMediaOptions(
@@ -731,6 +749,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
     } else {
       await _engine.muteLocalVideoStream(true);
       await _engine.stopPreview();
+      await _engine.enableLocalVideo(false);
       await _engine.updateChannelMediaOptions(
         const ChannelMediaOptions(publishCameraTrack: false, publishMicrophoneTrack: true),
       );
@@ -864,21 +883,52 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
     );
   }
 
+  bool get _showGroupGrid => widget.isGroupSession && _remoteUsers.isNotEmpty && _engineReady;
+
   Widget _buildRemoteArea() {
-    // الجلسة الجماعية: عرض شبكة فيديوهات لكل المتصلين
-    if (widget.isGroupSession && _remoteUsers.isNotEmpty && _engineReady) {
+    // الجلسة الجماعية: عرض شبكة فيديوهات لكل المتصلين، وكاميرتك خانة فيها حتى لا تحجب أحدًا
+    if (_showGroupGrid) {
       final uids = _remoteUsers.keys.toList();
+      final tileCount = uids.length + 1;
       return GridView.builder(
         physics: const NeverScrollableScrollPhysics(),
         shrinkWrap: true,
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: uids.length <= 1 ? 1 : 2,
-          childAspectRatio: uids.length <= 2 ? 16 / 9 : 1,
+          crossAxisCount: tileCount <= 1 ? 1 : 2,
+          childAspectRatio: tileCount <= 2 ? 16 / 9 : 1,
           mainAxisSpacing: 4,
           crossAxisSpacing: 4,
         ),
-        itemCount: uids.length,
+        itemCount: tileCount,
         itemBuilder: (context, index) {
+          if (index == uids.length) {
+            return Stack(
+              children: [
+                Positioned.fill(child: _buildLocalPreview()),
+                // قائمة المشاركين فوق صورة المقرئ حتى لا تغطي صور الطلاب
+                if (widget.isTeacher)
+                  Positioned(
+                    top: 6, right: 6, bottom: 28,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.topRight,
+                      child: _buildParticipantsPanel(),
+                    ),
+                  ),
+                Positioned(
+                  bottom: 4, right: 4,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text('أنت', style: TextStyle(color: Colors.white, fontSize: 11)),
+                  ),
+                ),
+              ],
+            );
+          }
           final uid = uids[index];
           final videoOn = _remoteUsers[uid] == true;
           final name = _activeParticipants[uid] ?? 'مشارك ${index + 1}';
@@ -892,6 +942,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
                       rtcEngine: _engine,
                       canvas: VideoCanvas(uid: uid),
                       connection: RtcConnection(channelId: widget.channelName),
+                      useFlutterTexture: Platform.isIOS,
                     ),
                   ),
                 ),
@@ -941,6 +992,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
                 rtcEngine: _engine,
                 canvas: VideoCanvas(uid: _remoteUid),
                 connection: RtcConnection(channelId: widget.channelName),
+                useFlutterTexture: Platform.isIOS,
               ),
             ),
           ),
@@ -1023,6 +1075,7 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
           controller: VideoViewController(
             rtcEngine: _engine,
             canvas: const VideoCanvas(uid: 0),
+            useFlutterTexture: Platform.isIOS,
           ),
         ),
       ),
@@ -1153,14 +1206,15 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
               Stack(
                 children: [
                   Positioned.fill(child: _buildRemoteArea()),
-                  Positioned(
-                    top: 16,
-                    left: 16,
-                    width: 124,
-                    height: 186,
-                    child: _buildLocalPreview(),
-                  ),
-                  if (widget.isTeacher && widget.isGroupSession)
+                  if (!_showGroupGrid)
+                    Positioned(
+                      top: 16,
+                      left: 16,
+                      width: 124,
+                      height: 186,
+                      child: _buildLocalPreview(),
+                    ),
+                  if (widget.isTeacher && widget.isGroupSession && !_showGroupGrid)
                     Positioned(
                       top: 16,
                       right: 16,
