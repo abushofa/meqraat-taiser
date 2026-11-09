@@ -69,6 +69,8 @@ class AppDialogs {
     Color? confirmColor,
     IconData icon = Icons.help_outline,
     Color iconColor = Colors.blue,
+    // زر الإلغاء هو الخيار المُبرز (المملوء) بدل زر التأكيد
+    bool cancelIsPrimary = false,
   }) async {
     final result = await showDialog<bool>(
       context: context,
@@ -116,22 +118,37 @@ class AppDialogs {
                 Row(
                   children: [
                     Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.of(dialogContext).pop(false),
-                        child: Text(cancelText),
-                      ),
+                      child: cancelIsPrimary
+                          ? ElevatedButton(
+                              autofocus: true,
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop(false),
+                              child: Text(cancelText),
+                            )
+                          : OutlinedButton(
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop(false),
+                              child: Text(cancelText),
+                            ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: ElevatedButton(
-                        style: confirmColor == null
-                            ? null
-                            : ElevatedButton.styleFrom(
-                                backgroundColor: confirmColor,
-                              ),
-                        onPressed: () => Navigator.of(dialogContext).pop(true),
-                        child: Text(confirmText),
-                      ),
+                      child: cancelIsPrimary
+                          ? OutlinedButton(
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop(true),
+                              child: Text(confirmText),
+                            )
+                          : ElevatedButton(
+                              style: confirmColor == null
+                                  ? null
+                                  : ElevatedButton.styleFrom(
+                                      backgroundColor: confirmColor,
+                                    ),
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop(true),
+                              child: Text(confirmText),
+                            ),
                     ),
                   ],
                 ),

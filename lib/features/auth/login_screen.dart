@@ -317,6 +317,7 @@ class _LoginScreenState extends State<LoginScreen>
         cancelText: 'توقف',
         icon: Icons.hourglass_top,
         iconColor: Colors.orange,
+        cancelIsPrimary: true,
       );
       if (!mounted || !continueAnyway) return;
     }
