@@ -523,6 +523,9 @@ class _AdminManageStudentsScreenState extends State<AdminManageStudentsScreen> {
             const SizedBox(height: 8),
             Text('البريد: ${item['email'] ?? ''}',
                 style: const TextStyle(fontSize: 13)),
+            if (item['age'] != null)
+              Text('العمر: ${item['age']}',
+                  style: const TextStyle(fontSize: 13)),
             Text('العنوان: ${item['address'] ?? ''}',
                 style: const TextStyle(fontSize: 13)),
             Text(
@@ -626,10 +629,11 @@ class _AdminManageStudentsScreenState extends State<AdminManageStudentsScreen> {
             ),
             const SizedBox(height: 6),
             Text('البريد: ${item['email'] ?? ''}'),
+            if (item['age'] != null) Text('العمر: ${item['age']}'),
             Text('العنوان: ${item['address'] ?? ''}'),
-            Text('المستوى: ${AppLabels.level(item['level']?.toString())}'),
+            Text('المستوى: ${AppLabels.levelText(item)}'),
             Text(
-              'القراءة: ${AppLabels.qiraa(item['reading_type']?.toString())}',
+              'القراءة: ${AppLabels.qiraatText(item['reading_type'])}',
             ),
             Text(
               'الفترة المفضلة: ${AppLabels.period(item['preferred_period']?.toString())}',

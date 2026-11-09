@@ -788,10 +788,10 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               ],
             ),
             const SizedBox(height: 14),
-            _miniInfoRow('المستوى', AppLabels.level(s['level']?.toString())),
+            _miniInfoRow('المستوى', AppLabels.levelText(s)),
             _miniInfoRow(
               'القراءة',
-              AppLabels.qiraa(s['reading_type']?.toString()),
+              AppLabels.qiraatText(s['reading_type']),
             ),
             _miniInfoRow('البريد', '${s['email'] ?? '—'}'),
             if (s['preferred_period'] != null)
@@ -950,7 +950,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            _miniInfoRow('القراءة المطلوبة', AppLabels.qiraa(s['reading_type']?.toString())),
+            _miniInfoRow('القراءة المطلوبة', AppLabels.qiraatText(s['reading_type'])),
             if (s['preferred_period'] != null)
               _miniInfoRow('الفترة المفضلة', AppLabels.period(s['preferred_period']?.toString())),
             if (expectedDate != null) ...[

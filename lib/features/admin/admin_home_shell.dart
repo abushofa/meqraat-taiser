@@ -40,6 +40,8 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
   bool _schoolFullEnabledOriginal = true;
   int _schoolFullWaitMonths = 2;
   int _schoolFullWaitMonthsOriginal = 2;
+  bool _teacherRegEnabled = false;
+  bool _teacherRegEnabledOriginal = false;
   int _studentReminderBefore = 5;
   int _studentReminderBeforeOriginal = 5;
   bool _drawerLoading = false;
@@ -51,6 +53,7 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
       _maxSessionDays != _maxSessionDaysOriginal ||
       _schoolFullEnabled != _schoolFullEnabledOriginal ||
       _schoolFullWaitMonths != _schoolFullWaitMonthsOriginal ||
+      _teacherRegEnabled != _teacherRegEnabledOriginal ||
       _studentReminderBefore != _studentReminderBeforeOriginal;
 
   late final List<Widget> _pages = [
@@ -161,6 +164,8 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
           _schoolFullEnabled = data['school_full_enabled'] == true;
           _schoolFullWaitMonths =
               (data['school_full_wait_months'] as num?)?.toInt() ?? 2;
+          _teacherRegEnabled =
+              data['teacher_registration_enabled'] == true;
           _studentReminderBefore =
               (data['reminder_student_before_minutes'] as num?)?.toInt() ?? 5;
           _evOriginal = _evEnabled;
@@ -168,6 +173,7 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
           _maxSessionDaysOriginal = _maxSessionDays;
           _schoolFullEnabledOriginal = _schoolFullEnabled;
           _schoolFullWaitMonthsOriginal = _schoolFullWaitMonths;
+          _teacherRegEnabledOriginal = _teacherRegEnabled;
           _studentReminderBeforeOriginal = _studentReminderBefore;
         });
       }
@@ -186,6 +192,7 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
         'max_session_days': _maxSessionDays,
         'school_full_enabled': _schoolFullEnabled,
         'school_full_wait_months': _schoolFullWaitMonths,
+        'teacher_registration_enabled': _teacherRegEnabled,
         'reminder_student_before_minutes': _studentReminderBefore,
       });
       final body = res.data;
@@ -446,6 +453,23 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
                             ),
                           ],
                         ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Card(
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      child: SwitchListTile(
+                        value: _teacherRegEnabled,
+                        onChanged: (v) =>
+                            setState(() => _teacherRegEnabled = v),
+                        title: const Text('تسجيل المُقرئين'),
+                        subtitle: const Text(
+                            'السماح بإرسال طلبات تسجيل مُقرئين جدد',
+                            style: TextStyle(fontSize: 12)),
+                        secondary: const Icon(Icons.record_voice_over_outlined,
+                            color: Colors.teal),
+                        activeThumbColor: Colors.teal,
                       ),
                     ),
                     const SizedBox(height: 16),

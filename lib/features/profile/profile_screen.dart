@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../../core/network/api_client.dart';
+import '../../core/widgets/student_level_fields.dart';
 import '../../core/utils/app_labels.dart';
 import '../../core/widgets/app_dialogs.dart';
 import '../../core/widgets/period_times_card.dart';
@@ -212,10 +213,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _infoTile('العنوان', '${extra['address'] ?? '—'}'),
         _infoTile('العمر', '${extra['age'] ?? '—'}'),
         _infoTile('الجنس', AppLabels.gender(extra['gender']?.toString())),
-        _infoTile('المستوى', AppLabels.level(extra['level']?.toString())),
+        _infoTile('المستوى', AppLabels.levelText(extra)),
         _infoTile(
           'القراءة',
-          AppLabels.qiraa(extra['reading_type']?.toString()),
+          AppLabels.qiraatText(extra['reading_type']),
         ),
         _infoTile(
           'الفترة المفضلة',
@@ -342,8 +343,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late final TextEditingController _ageController;
 
   String _gender = 'male';
-  String _level = 'beginner';
-  String _readingType = 'hafs_an_asim';
+  StudentLevelValue _levelValue = const StudentLevelValue();
   String _preferredPeriod = 'after_asr';
 
   final Set<String> _teacherReadings = {};
@@ -368,8 +368,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _gender = widget.extra['gender']?.toString() ?? 'male';
 
     if (widget.role == 'student') {
-      _level = widget.extra['level']?.toString() ?? 'beginner';
-      _readingType = widget.extra['reading_type']?.toString() ?? 'hafs_an_asim';
+      _levelValue = StudentLevelValue.fromMap(widget.extra);
       _preferredPeriod =
           widget.extra['preferred_period']?.toString() ?? 'after_asr';
     }
@@ -509,8 +508,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           'address': _addressController.text.trim(),
           'age': int.tryParse(_ageController.text.trim()) ?? 0,
           'gender': _gender,
-          'level': _level,
-          'reading_type': _readingType,
+          ..._levelValue.toPayload(),
           'preferred_period': _preferredPeriod,
         });
       } else if (widget.role == 'teacher') {
@@ -699,56 +697,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     const SizedBox(height: 12),
                   ],
                   if (isStudent) ...[
-                    DropdownButtonFormField<String>(
-                      initialValue: _level,
-                      decoration: _inputDecoration('المستوى'),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'beginner',
-                          child: Text('مبتدئ'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'intermediate',
-                          child: Text('متوسط'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'advanced',
-                          child: Text('متقدم'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'new_reading',
-                          child: Text('قراءة جديدة'),
-                        ),
-                      ],
-                      onChanged: _saving
-                          ? null
-                          : (value) {
-                              if (value == null) return;
-                              setState(() {
-                                _level = value;
-                              });
-                            },
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      initialValue: _readingType,
-                      decoration: _inputDecoration('القراءة'),
-                      items: AppLabels.qiraatList()
-                          .map(
-                            (q) => DropdownMenuItem(
-                              value: q,
-                              child: Text(AppLabels.qiraa(q)),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: _saving
-                          ? null
-                          : (value) {
-                              if (value == null) return;
-                              setState(() {
-                                _readingType = value;
-                              });
-                            },
+                    StudentLevelFields(
+                      value: _levelValue,
+                      enabled: !_saving,
+                      onChanged: (v) => setState(() => _levelValue = v),
                     ),
                     const SizedBox(height: 16),
                     Align(

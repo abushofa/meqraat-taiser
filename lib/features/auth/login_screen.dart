@@ -336,6 +336,20 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Future<void> _goToTeacherRegister() async {
+    setState(() => _checkingSchoolFull = true);
+    await AppSettingsService.load();
+    if (!mounted) return;
+    setState(() => _checkingSchoolFull = false);
+
+    if (!AppSettingsService.teacherRegistrationEnabled) {
+      await AppDialogs.showInfo(
+        context: context,
+        title: 'التسجيل كمُقرئ',
+        message: 'استقبال طلبات التسجيل كمُقرئ متوقف حاليًا.',
+      );
+      return;
+    }
+
     final result = await Navigator.of(context).push<String>(
       MaterialPageRoute(builder: (_) => const TeacherRegisterScreen()),
     );

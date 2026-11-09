@@ -34,9 +34,47 @@ class AppLabels {
         return 'متقدم';
       case 'new_reading':
         return 'قراءة جديدة';
+      case 'tahfeez':
+        return 'تحفيظ';
+      case 'qiraat':
+        return 'قراءات';
       default:
         return value ?? '';
     }
+  }
+
+  static String qiraatMode(String? value) {
+    switch ((value ?? '').toLowerCase()) {
+      case 'ifrad':
+        return 'إفراد';
+      case 'jam':
+        return 'جمع';
+      default:
+        return value ?? '';
+    }
+  }
+
+  static String partsCount(int n) {
+    if (n == 0) return 'لم يحفظ بعد';
+    if (n == 1) return 'يحفظ جزءًا واحدًا';
+    if (n == 2) return 'يحفظ جزأين';
+    if (n <= 10) return 'يحفظ $n أجزاء';
+    return 'يحفظ $n جزءًا';
+  }
+
+  /// المستوى كاملًا من بيانات الطالب: "تحفيظ — يحفظ 12 جزءًا" أو "قراءات — جمع"
+  static String levelText(Map item) {
+    final level = item['level']?.toString();
+    final base = AppLabels.level(level);
+    if (level == 'tahfeez') {
+      final parts = int.tryParse(item['memorized_parts']?.toString() ?? '');
+      return parts == null ? base : '$base — ${partsCount(parts)}';
+    }
+    if (level == 'qiraat') {
+      final mode = item['qiraat_mode']?.toString();
+      return (mode == null || mode.isEmpty) ? base : '$base — ${qiraatMode(mode)}';
+    }
+    return base;
   }
 
   static String sessionType(String? value) {

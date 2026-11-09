@@ -236,7 +236,7 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen> {
   Widget _studentCard(Map student) {
     final name = '${student['name'] ?? '—'}';
     final email = '${student['email'] ?? '—'}';
-    final readingType = AppLabels.qiraa(student['reading_type']?.toString());
+    final readingType = AppLabels.qiraatText(student['reading_type']);
     final preferredPeriod = AppLabels.period(
       student['preferred_period']?.toString(),
     );
@@ -259,7 +259,7 @@ class _TeacherStudentsScreenState extends State<TeacherStudentsScreen> {
             ),
             const SizedBox(height: 6),
             Text('البريد: $email'),
-            Text("المستوى: ${AppLabels.level(student['level']?.toString())}"),
+            Text("المستوى: ${AppLabels.levelText(student)}"),
             Text('القراءة: $readingType'),
             Text('الفترة المفضلة: $preferredPeriod'),
             Text('الغرفة: $room'),

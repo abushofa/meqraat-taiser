@@ -435,10 +435,11 @@ class _AdminPendingRequestsScreenState
             ),
             const SizedBox(height: 6),
             Text('البريد: ${item['email'] ?? ''}'),
+            if (item['age'] != null) Text('العمر: ${item['age']}'),
             Text('العنوان: ${item['address'] ?? ''}'),
-            Text('المستوى: ${AppLabels.level(item['level']?.toString())}'),
+            Text('المستوى: ${AppLabels.levelText(item)}'),
             Text(
-              'القراءة: ${AppLabels.qiraa(item['reading_type']?.toString())}',
+              'القراءة: ${AppLabels.qiraatText(item['reading_type'])}',
             ),
             Text(
               'الفترة المفضلة: ${AppLabels.period(item['preferred_period']?.toString())}',

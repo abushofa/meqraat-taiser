@@ -514,8 +514,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   title: '${m['name'] ?? '—'}',
                   subtitle: _buildSubtitle([
                     'البريد: ${m['email'] ?? '—'}',
+                    if (m['age'] != null) 'العمر: ${m['age']}',
                     if (m['level'] != null)
-                      'المستوى: ${AppLabels.level(m['level']?.toString())}',
+                      'المستوى: ${AppLabels.levelText(m)}',
                   ]),
                   icon: Icons.person_add_alt_1_outlined,
                   color: const Color(0xFFE0F2FE),
@@ -563,8 +564,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   title: '${m['name'] ?? '—'}',
                   subtitle: _buildSubtitle([
                     'البريد: ${m['email'] ?? '—'}',
+                    if (m['age'] != null) 'العمر: ${m['age']}',
                     if (m['level'] != null)
-                      'المستوى: ${AppLabels.level(m['level']?.toString())}',
+                      'المستوى: ${AppLabels.levelText(m)}',
                   ]),
                   trailing: _buildOptionalStatusBadge(m['status']),
                   icon: Icons.person_search_outlined,

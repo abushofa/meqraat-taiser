@@ -6,6 +6,7 @@ import '../../core/utils/app_labels.dart';
 import '../../core/widgets/password_strength_indicator.dart';
 import '../../core/widgets/day_picker_widget.dart';
 import '../../core/widgets/period_times_card.dart';
+import '../../core/widgets/student_level_fields.dart';
 import 'verify_email_screen.dart';
 
 class StudentRegisterScreen extends StatefulWidget {
@@ -26,8 +27,7 @@ class _StudentRegisterScreenState extends State<StudentRegisterScreen> {
   final _confirmPasswordController = TextEditingController();
 
   String _gender = 'male';
-  String _level = 'beginner';
-  String _readingType = 'hafs_an_asim';
+  StudentLevelValue _levelValue = const StudentLevelValue();
   String _preferredPeriod = 'after_asr';
   List<String> _preferredDays = [];
   bool _daysError = false;
@@ -85,8 +85,7 @@ class _StudentRegisterScreenState extends State<StudentRegisterScreen> {
           'address': _addressController.text.trim(),
           'age': int.tryParse(_ageController.text.trim()) ?? 0,
           'gender': _gender,
-          'level': _level,
-          'reading_type': _readingType,
+          ..._levelValue.toPayload(),
           'preferred_period': _preferredPeriod,
           'preferred_days': _preferredDays.join(','),
         },
@@ -165,20 +164,6 @@ class _StudentRegisterScreenState extends State<StudentRegisterScreen> {
             value: period,
             child: Text(
               AppLabels.period(period),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        )
-        .toList();
-  }
-
-  List<DropdownMenuItem<String>> _qiraaItems() {
-    return AppLabels.qiraatList()
-        .map(
-          (qiraa) => DropdownMenuItem<String>(
-            value: qiraa,
-            child: Text(
-              AppLabels.qiraa(qiraa),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -340,51 +325,10 @@ class _StudentRegisterScreenState extends State<StudentRegisterScreen> {
                       ),
                       const SizedBox(height: 12),
 
-                      DropdownButtonFormField<String>(
-                        initialValue: _level,
-                        isExpanded: true,
-                        decoration: _inputDecoration('المستوى'),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'beginner',
-                            child: Text('مبتدئ'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'intermediate',
-                            child: Text('متوسط'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'advanced',
-                            child: Text('متقدم'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'new_reading',
-                            child: Text('قراءة جديدة'),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() {
-                              _level = value;
-                            });
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 12),
-
-                      DropdownButtonFormField<String>(
-                        initialValue: _readingType,
-                        isExpanded: true,
-                        menuMaxHeight: 420,
-                        decoration: _inputDecoration('القراءة المطلوبة'),
-                        items: _qiraaItems(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() {
-                              _readingType = value;
-                            });
-                          }
-                        },
+                      StudentLevelFields(
+                        value: _levelValue,
+                        enabled: !_loading,
+                        onChanged: (v) => setState(() => _levelValue = v),
                       ),
                       const SizedBox(height: 12),
 
