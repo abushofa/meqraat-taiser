@@ -527,6 +527,9 @@ class _AdminManageStudentsScreenState extends State<AdminManageStudentsScreen> {
             if (item['age'] != null)
               Text('العمر: ${item['age']}',
                   style: const TextStyle(fontSize: 13)),
+            if (item['gender'] != null)
+              Text('الجنس: ${AppLabels.gender(item['gender']?.toString())}',
+                  style: const TextStyle(fontSize: 13)),
             Text('العنوان: ${item['address'] ?? ''}',
                 style: const TextStyle(fontSize: 13)),
             Text(
@@ -631,6 +634,7 @@ class _AdminManageStudentsScreenState extends State<AdminManageStudentsScreen> {
             const SizedBox(height: 6),
             Text('البريد: ${item['email'] ?? ''}'),
             if (item['age'] != null) Text('العمر: ${item['age']}'),
+            if (item['gender'] != null) Text('الجنس: ${AppLabels.gender(item['gender']?.toString())}'),
             Text('العنوان: ${item['address'] ?? ''}'),
             Text('المستوى: ${AppLabels.levelText(item)}'),
             Text(

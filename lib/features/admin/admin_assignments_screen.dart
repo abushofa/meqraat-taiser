@@ -350,6 +350,7 @@ class _AdminAssignmentsScreenState extends State<AdminAssignmentsScreen> {
             const SizedBox(height: 6),
             Text('البريد: ${item['email'] ?? ''}'),
             if (item['age'] != null) Text('العمر: ${item['age']}'),
+            if (item['gender'] != null) Text('الجنس: ${AppLabels.gender(item['gender']?.toString())}'),
             Text('المستوى: ${AppLabels.levelText(item)}'),
             Text(
               'القراءة المطلوبة: ${AppLabels.qiraatText(item['reading_type'])}',

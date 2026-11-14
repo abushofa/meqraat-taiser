@@ -437,6 +437,7 @@ class _AdminPendingRequestsScreenState
             const SizedBox(height: 6),
             Text('البريد: ${item['email'] ?? ''}'),
             if (item['age'] != null) Text('العمر: ${item['age']}'),
+            if (item['gender'] != null) Text('الجنس: ${AppLabels.gender(item['gender']?.toString())}'),
             Text('العنوان: ${item['address'] ?? ''}'),
             Text('المستوى: ${AppLabels.levelText(item)}'),
             Text(

@@ -515,6 +515,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   subtitle: _buildSubtitle([
                     'البريد: ${m['email'] ?? '—'}',
                     if (m['age'] != null) 'العمر: ${m['age']}',
+                    if (m['gender'] != null)
+                      'الجنس: ${AppLabels.gender(m['gender']?.toString())}',
                     if (m['level'] != null)
                       'المستوى: ${AppLabels.levelText(m)}',
                   ]),
@@ -565,6 +567,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   subtitle: _buildSubtitle([
                     'البريد: ${m['email'] ?? '—'}',
                     if (m['age'] != null) 'العمر: ${m['age']}',
+                    if (m['gender'] != null)
+                      'الجنس: ${AppLabels.gender(m['gender']?.toString())}',
                     if (m['level'] != null)
                       'المستوى: ${AppLabels.levelText(m)}',
                   ]),
