@@ -7,6 +7,7 @@ class AppSettingsService {
   static bool schoolFullEnabled = true;
   static int schoolFullWaitMonths = 2;
   static bool teacherRegistrationEnabled = false;
+  static bool studentRegistrationEnabled = true;
   static bool _loaded = false;
 
   static Future<void> load() async {
@@ -25,6 +26,8 @@ class AppSettingsService {
             (data['school_full_wait_months'] as num?)?.toInt() ?? 2;
         teacherRegistrationEnabled =
             data['teacher_registration_enabled'] == true;
+        studentRegistrationEnabled =
+            data['student_registration_enabled'] != false;
         _loaded = true;
       }
     } catch (_) {}

@@ -8,6 +8,7 @@ import '../../core/utils/app_labels.dart';
 import '../../core/widgets/app_dialogs.dart';
 import '../../core/ui/app_snackbar.dart';
 import '../../core/widgets/error_retry_view.dart';
+import 'archive_group_button.dart';
 
 class AdminPendingRequestsScreen extends StatefulWidget {
   const AdminPendingRequestsScreen({super.key});
@@ -519,9 +520,21 @@ class _AdminPendingRequestsScreenState
           else
             ...students.map((e) => _studentCard(e as Map)),
           const SizedBox(height: 24),
-          const Text(
-            'طلبات المُقرئين المعلقة',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'طلبات المُقرئين المعلقة',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+              ArchiveGroupButton(
+                group: 'teachers_pending',
+                count: teachers.length,
+                what: 'المُقرئين غير المعتمدين',
+                onDone: _loadPendingRequests,
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           if (teachers.isEmpty)

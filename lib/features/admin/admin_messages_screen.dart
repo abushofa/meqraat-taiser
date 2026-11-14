@@ -175,8 +175,9 @@ class _AdminMessagesScreenState extends State<AdminMessagesScreen>
             ),
             icon: const Icon(Icons.alternate_email),
             label: const Text('بريد إلكتروني'),
-            backgroundColor: Colors.white,
-            foregroundColor: const Color(0xFF0F766E),
+            // لون خاص بالبريد الإلكتروني يميّزه عن الرسائل داخل التطبيق
+            backgroundColor: const Color(0xFF1D4ED8),
+            foregroundColor: Colors.white,
           ),
           const SizedBox(height: 12),
           FloatingActionButton.extended(

@@ -8,6 +8,7 @@ import '../../core/widgets/app_dialogs.dart';
 import '../../core/ui/app_snackbar.dart';
 import '../../core/utils/admin_refresh_notifier.dart';
 import '../../core/widgets/error_retry_view.dart';
+import 'archive_group_button.dart';
 
 class AdminManageStudentsScreen extends StatefulWidget {
   const AdminManageStudentsScreen({super.key});
@@ -714,6 +715,13 @@ class _AdminManageStudentsScreenState extends State<AdminManageStudentsScreen> {
                 const Text(
                   'قائمة الانتظار',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const Spacer(),
+                ArchiveGroupButton(
+                  group: 'students_waitlisted',
+                  count: waitlisted.length,
+                  what: 'طلاب قائمة الانتظار',
+                  onDone: _loadData,
                 ),
               ],
             ),

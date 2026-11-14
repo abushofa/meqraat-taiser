@@ -306,6 +306,18 @@ class _LoginScreenState extends State<LoginScreen>
     if (!mounted) return;
     setState(() => _checkingSchoolFull = false);
 
+    if (!AppSettingsService.studentRegistrationEnabled) {
+      await AppDialogs.showInfo(
+        context: context,
+        title: 'التسجيل كطالب',
+        message:
+            'المقرأة ممتلئة الآن وسيفتح باب التسجيل عند توفر أماكن شاغرة.',
+        icon: Icons.hourglass_top,
+        iconColor: Colors.orange,
+      );
+      return;
+    }
+
     if (AppSettingsService.schoolFullEnabled) {
       final months = AppSettingsService.schoolFullWaitMonths;
       final continueAnyway = await AppDialogs.showConfirm(
