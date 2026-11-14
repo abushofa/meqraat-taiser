@@ -3,6 +3,7 @@ import '../../core/network/api_client.dart';
 import '../../core/ui/app_snackbar.dart';
 import '../../core/utils/app_labels.dart';
 import '../../core/widgets/reply_message_sheet.dart';
+import 'admin_email_screen.dart';
 
 class AdminMessagesScreen extends StatefulWidget {
   const AdminMessagesScreen({super.key});
@@ -162,11 +163,30 @@ class _AdminMessagesScreenState extends State<AdminMessagesScreen>
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openCompose,
-        icon: const Icon(Icons.edit_outlined),
-        label: const Text('رسالة جديدة'),
-        backgroundColor: const Color(0xFF0F766E),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          FloatingActionButton.extended(
+            heroTag: 'admin_email_fab',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AdminEmailScreen()),
+            ),
+            icon: const Icon(Icons.alternate_email),
+            label: const Text('بريد إلكتروني'),
+            backgroundColor: Colors.white,
+            foregroundColor: const Color(0xFF0F766E),
+          ),
+          const SizedBox(height: 12),
+          FloatingActionButton.extended(
+            heroTag: 'admin_message_fab',
+            onPressed: _openCompose,
+            icon: const Icon(Icons.edit_outlined),
+            label: const Text('رسالة جديدة'),
+            backgroundColor: const Color(0xFF0F766E),
+          ),
+        ],
       ),
     );
   }
