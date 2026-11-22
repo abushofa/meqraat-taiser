@@ -13,6 +13,7 @@ import 'verify_email_screen.dart';
 import '../../core/storage/session_storage.dart';
 import '../../core/notifications/push_notification_service.dart';
 import '../../core/utils/device_info_helper.dart';
+import '../../core/utils/update_checker.dart';
 import '../../core/utils/battery_optimization_helper.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -93,6 +94,9 @@ class _LoginScreenState extends State<LoginScreen>
     // إذا كانت هناك جلسة سابقة لم تُغلق بشكل صحيح، امسح الـ token من السيرفر
     // حتى لا يُمنع المستخدم من الدخول على جهاز آخر لاحقاً
     _clearStaleSession();
+
+    // قبل أن يملأ أحد نموذج الدخول أو التسجيل بنسخة قديمة
+    Future.delayed(const Duration(seconds: 1), () => UpdateChecker.check());
   }
 
   Future<void> _clearStaleSession() async {

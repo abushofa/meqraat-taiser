@@ -16,6 +16,7 @@ import 'admin_dashboard_screen.dart';
 import 'admin_messages_screen.dart';
 import 'admin_accounts_tab_screen.dart';
 import 'admin_monitoring_tab_screen.dart';
+import '../../core/utils/update_checker.dart';
 
 class AdminHomeShell extends StatefulWidget {
   const AdminHomeShell({super.key});
@@ -77,6 +78,7 @@ class _AdminHomeShellState extends State<AdminHomeShell> {
   void initState() {
     super.initState();
     NotificationNavigationService.adminTabToOpen.addListener(_onTabRequested);
+    Future.delayed(const Duration(seconds: 2), () => UpdateChecker.check());
   }
 
   @override

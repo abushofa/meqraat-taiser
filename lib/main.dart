@@ -14,6 +14,7 @@ import 'features/student/student_home_shell.dart';
 import 'features/student/student_message_details_screen.dart';
 import 'features/student/student_notification_message_screen.dart';
 import 'firebase_options.dart';
+import 'core/utils/update_checker.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -56,6 +57,8 @@ class _QuranAppState extends State<QuranApp> with WidgetsBindingObserver {
     if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
       _notifyAppClose();
     }
+    // عاد المستخدم إلى التطبيق: هل صدر تحديث (إجباري) أثناء غيابه؟
+    if (state == AppLifecycleState.resumed) UpdateChecker.check();
   }
 
   Future<void> _notifyAppClose() async {
