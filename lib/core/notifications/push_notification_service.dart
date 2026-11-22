@@ -11,8 +11,20 @@ import '../network/api_client.dart';
 import 'notification_navigation_service.dart';
 import '../../core/storage/session_storage.dart';
 
+/// إشعار ضغطه المستخدم قبل تسجيل الدخول — يُعرض في صفحة الدخول ويُفتح مكانه بعدها
+class PendingNotification {
+  final String title;
+  final String body;
+  final Map<String, dynamic> data;
+  const PendingNotification(this.title, this.body, this.data);
+}
+
 class PushNotificationService {
   static final FirebaseMessaging _messaging = FirebaseMessaging.instance;
+
+  /// آخر إشعار فُتح به التطبيق والمستخدم غير داخل بعد (null = لا شيء)
+  static final ValueNotifier<PendingNotification?> pending =
+      ValueNotifier<PendingNotification?>(null);
 
   static final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
@@ -154,14 +166,12 @@ class PushNotificationService {
     });
 
     // المستخدم يضغط على الإشعار والتطبيق في الخلفية
-    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      _handleNotificationData(message.data);
-    });
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleTap);
 
     // التطبيق مغلق تماماً والمستخدم يضغط على الإشعار
     final initialMessage = await _messaging.getInitialMessage();
     if (initialMessage != null) {
-      _handleNotificationData(initialMessage.data);
+      await _handleTap(initialMessage);
     }
   }
 
@@ -254,6 +264,45 @@ class PushNotificationService {
       }
     } catch (_) {
       _handleNotificationData({'type': payload, 'target_role': 'student'});
+    }
+  }
+
+  /// ضغطة على إشعار: إن لم يكن المستخدم داخلًا (أو التطبيق يُفتح من الإغلاق)
+  /// نحفظه ليظهر في صفحة الدخول بدل أن يضيع.
+  static Future<void> _handleTap(RemoteMessage message) async {
+    final loggedIn = await SessionStorage.isLoggedIn();
+    final navReady = NotificationNavigationService.navigatorKey.currentState != null;
+    if (!loggedIn || !navReady) {
+      final data = Map<String, dynamic>.from(message.data);
+      pending.value = PendingNotification(
+        message.notification?.title ?? data['message_title']?.toString() ?? 'إشعار',
+        message.notification?.body ?? data['message_body']?.toString() ?? '',
+        data,
+      );
+      return;
+    }
+    await _handleNotificationData(message.data);
+  }
+
+  /// بعد تسجيل الدخول: يفتح التبويب المناسب للإشعار المحفوظ (يُستدعى بعد فتح الصفحة الرئيسية)
+  static void applyPendingAfterLogin(String? role) {
+    final p = pending.value;
+    pending.value = null;
+    if (p == null) return;
+    final type = p.data['type']?.toString();
+    final target = p.data['target_role']?.toString();
+    if (target != null && target != role) return; // حساب آخر غير صاحب الإشعار
+
+    if (role == 'student') {
+      if (type == 'message') NotificationNavigationService.openStudentMessages();
+      if (type == 'session' || type == 'session_reminder') {
+        NotificationNavigationService.openStudentSessions();
+      }
+    } else if (role == 'teacher') {
+      if (type == 'message') NotificationNavigationService.openTeacherMessages();
+      if (type == 'session_reminder') NotificationNavigationService.openTeacherDashboard();
+    } else if (role == 'admin') {
+      if (type == 'message') NotificationNavigationService.openAdminMessages();
     }
   }
 

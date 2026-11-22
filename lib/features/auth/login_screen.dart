@@ -175,6 +175,11 @@ class _LoginScreenState extends State<LoginScreen>
             ),
           );
         }
+
+        // إشعار فُتح به التطبيق قبل الدخول ← افتح مكانه بعد ظهور الصفحة الرئيسية
+        final r = role?.toString();
+        Future.delayed(const Duration(milliseconds: 500),
+            () => PushNotificationService.applyPendingAfterLogin(r));
       } else {
         setState(() {
           _error =
@@ -480,6 +485,65 @@ class _LoginScreenState extends State<LoginScreen>
                         ),
 
                         const SizedBox(height: 24),
+
+                        // إشعار ضغطه المستخدم والتطبيق مغلق: يُعرض هنا حتى لا يضيع
+                        ValueListenableBuilder<PendingNotification?>(
+                          valueListenable: PushNotificationService.pending,
+                          builder: (context, p, _) {
+                            if (p == null) return const SizedBox.shrink();
+                            return Container(
+                              width: double.infinity,
+                              margin: const EdgeInsets.only(bottom: 16),
+                              padding: const EdgeInsets.fromLTRB(12, 10, 4, 12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFF7E6),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: const Color(0xFFF5C26B)),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Padding(
+                                    padding: EdgeInsets.only(top: 2),
+                                    child: Icon(Icons.notifications_active,
+                                        color: Color(0xFFB7791F), size: 22),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(p.title,
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 15)),
+                                        if (p.body.isNotEmpty) ...[
+                                          const SizedBox(height: 4),
+                                          Text(p.body,
+                                              style: const TextStyle(
+                                                  fontSize: 14, height: 1.5)),
+                                        ],
+                                        const SizedBox(height: 6),
+                                        const Text(
+                                          'سجّل الدخول لفتحه',
+                                          style: TextStyle(
+                                              fontSize: 12.5,
+                                              color: Color(0xFF6B7280)),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  IconButton(
+                                    tooltip: 'إخفاء',
+                                    icon: const Icon(Icons.close, size: 18),
+                                    onPressed: () =>
+                                        PushNotificationService.pending.value = null,
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
 
                         TextField(
                           controller: _emailController,
