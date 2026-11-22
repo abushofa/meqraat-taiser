@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'membership_end_dialog.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../../core/network/api_client.dart';
@@ -419,11 +420,18 @@ class _AdminManageStudentsScreenState extends State<AdminManageStudentsScreen> {
 
   Future<void> _doStudentAction(int studentId, String action,
       {String? expectedDate}) async {
+    // الرفض: كان يتم مباشرة بلا تأكيد — الآن بنافذة السبب/الإرسال/المنع
+    Map<String, dynamic>? endFields;
+    if (action == 'reject') {
+      endFields = await MembershipEndDialog.show(context, isDelete: false);
+      if (endFields == null || !mounted) return;
+    }
     try {
       final dio = await ApiClient.getInstance();
       final data = <String, dynamic>{
         'student_id': studentId,
         'action': action,
+        ...?endFields,
       };
       if (action == 'update_waitlist' && expectedDate != null) {
         data['expected_date'] = expectedDate;

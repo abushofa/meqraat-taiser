@@ -317,6 +317,22 @@ class _AdminDeletedUsersScreenState extends State<AdminDeletedUsersScreen> {
               Text('البريد: ${m['email']}'),
               Text('الدور: ${m['role'] == 'teacher' ? 'مقرئ' : m['role'] == 'student' ? 'طالب' : m['role']}'),
               Text('تاريخ الحذف: ${m['deleted_at']}'),
+              if ((m['deleted_comment'] ?? '').toString().trim().isNotEmpty)
+                Text('السبب: ${m['deleted_comment']}'),
+              if (m['blocked'] == true)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Row(
+                    children: [
+                      Icon(Icons.block, size: 16, color: Colors.red.shade700),
+                      const SizedBox(width: 4),
+                      Text('ممنوع من التسجيل مجددًا',
+                          style: TextStyle(
+                              color: Colors.red.shade700,
+                              fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
               if (!_selecting) ...[
                 const SizedBox(height: 12),
                 Row(

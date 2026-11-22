@@ -6,6 +6,7 @@ import '../../core/utils/admin_refresh_notifier.dart';
 import '../../core/network/api_client.dart';
 import '../../core/utils/app_labels.dart';
 import '../../core/widgets/app_dialogs.dart';
+import 'membership_end_dialog.dart';
 import '../../core/ui/app_snackbar.dart';
 import '../../core/widgets/error_retry_view.dart';
 import 'archive_group_button.dart';
@@ -97,42 +98,49 @@ class _AdminPendingRequestsScreenState
     final isApprove = action == 'approve';
     final isWaitlist = action == 'waitlist';
 
-    final confirmed = await AppDialogs.showConfirm(
-      context: context,
-      title: isApprove
-          ? 'اعتماد الطالب'
-          : isWaitlist
-              ? 'وضع الطالب في قائمة الانتظار'
-              : 'رفض الطالب',
-      message: isApprove
-          ? 'هل تريد اعتماد هذا الطالب؟'
-          : isWaitlist
-              ? 'هل تريد وضع الطالب في قائمة الانتظار؟'
-              : 'هل تريد رفض هذا الطالب؟',
-      confirmText: isApprove
-          ? 'اعتماد'
-          : isWaitlist
-              ? 'تأكيد'
-              : 'رفض',
-      cancelText: 'إلغاء',
-      confirmColor: isApprove
-          ? null
-          : isWaitlist
-              ? Colors.amber.shade700
-              : Colors.red,
-      icon: isApprove
-          ? Icons.verified_outlined
-          : isWaitlist
-              ? Icons.hourglass_top
-              : Icons.block_outlined,
-      iconColor: isApprove
-          ? Colors.green
-          : isWaitlist
-              ? Colors.amber
-              : Colors.red,
-    );
+    // الرفض: نافذة السبب/الإرسال/المنع بدل التأكيد العادي
+    Map<String, dynamic>? endFields;
+    if (action == 'reject') {
+      endFields = await MembershipEndDialog.show(context, isDelete: false);
+      if (endFields == null || !mounted) return;
+    } else {
+      final confirmed = await AppDialogs.showConfirm(
+        context: context,
+        title: isApprove
+            ? 'اعتماد الطالب'
+            : isWaitlist
+                ? 'وضع الطالب في قائمة الانتظار'
+                : 'رفض الطالب',
+        message: isApprove
+            ? 'هل تريد اعتماد هذا الطالب؟'
+            : isWaitlist
+                ? 'هل تريد وضع الطالب في قائمة الانتظار؟'
+                : 'هل تريد رفض هذا الطالب؟',
+        confirmText: isApprove
+            ? 'اعتماد'
+            : isWaitlist
+                ? 'تأكيد'
+                : 'رفض',
+        cancelText: 'إلغاء',
+        confirmColor: isApprove
+            ? null
+            : isWaitlist
+                ? Colors.amber.shade700
+                : Colors.red,
+        icon: isApprove
+            ? Icons.verified_outlined
+            : isWaitlist
+                ? Icons.hourglass_top
+                : Icons.block_outlined,
+        iconColor: isApprove
+            ? Colors.green
+            : isWaitlist
+                ? Colors.amber
+                : Colors.red,
+      );
 
-    if (!confirmed || !mounted) return;
+      if (!confirmed || !mounted) return;
+    }
 
     try {
       final dio = await ApiClient.getInstance();
@@ -141,6 +149,7 @@ class _AdminPendingRequestsScreenState
         'student_id': studentId,
         'action': action,
       };
+      if (endFields != null) data.addAll(endFields);
       if (isWaitlist) {
         data['wait_months'] = waitMonths;
         data['wait_weeks']  = waitWeeks;
@@ -302,27 +311,34 @@ class _AdminPendingRequestsScreenState
   Future<void> _updateTeacherStatus(int teacherId, String action) async {
     final isApprove = action == 'approve';
 
-    final confirmed = await AppDialogs.showConfirm(
-      context: context,
-      title: isApprove ? 'اعتماد المُقرئ' : 'رفض المُقرئ',
-      message: isApprove
-          ? 'هل تريد اعتماد هذا المُقرئ؟'
-          : 'هل تريد رفض هذا المُقرئ؟',
-      confirmText: isApprove ? 'اعتماد' : 'رفض',
-      cancelText: 'إلغاء',
-      confirmColor: isApprove ? null : Colors.red,
-      icon: isApprove ? Icons.verified_outlined : Icons.block_outlined,
-      iconColor: isApprove ? Colors.green : Colors.red,
-    );
+    // الرفض: نافذة السبب/الإرسال/المنع بدل التأكيد العادي
+    Map<String, dynamic>? endFields;
+    if (action == 'reject') {
+      endFields = await MembershipEndDialog.show(context, isDelete: false);
+      if (endFields == null || !mounted) return;
+    } else {
+      final confirmed = await AppDialogs.showConfirm(
+        context: context,
+        title: isApprove ? 'اعتماد المُقرئ' : 'رفض المُقرئ',
+        message: isApprove
+            ? 'هل تريد اعتماد هذا المُقرئ؟'
+            : 'هل تريد رفض هذا المُقرئ؟',
+        confirmText: isApprove ? 'اعتماد' : 'رفض',
+        cancelText: 'إلغاء',
+        confirmColor: isApprove ? null : Colors.red,
+        icon: isApprove ? Icons.verified_outlined : Icons.block_outlined,
+        iconColor: isApprove ? Colors.green : Colors.red,
+      );
 
-    if (!confirmed || !mounted) return;
+      if (!confirmed || !mounted) return;
+    }
 
     try {
       final dio = await ApiClient.getInstance();
 
       final response = await dio.post(
         '/admin/teacher_status.php',
-        data: {'teacher_id': teacherId, 'action': action},
+        data: {'teacher_id': teacherId, 'action': action, ...?endFields},
       );
 
       final body = response.data;

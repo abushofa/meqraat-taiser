@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'membership_end_dialog.dart';
 import 'package:flutter/material.dart';
 import '../../core/network/api_client.dart';
 import '../../core/utils/app_labels.dart';
@@ -167,38 +168,15 @@ class _AdminDirectoryScreenState extends State<AdminDirectoryScreen>
         return;
       }
 
-      // 🔥 طلب السبب
-      final controller = TextEditingController();
-
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (_) {
-          return AlertDialog(
-            title: const Text('سبب الحذف'),
-            content: TextField(
-              controller: controller,
-              decoration: const InputDecoration(
-                hintText: 'اكتب سبب الحذف...',
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('إلغاء'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  if (controller.text.trim().isEmpty) return;
-                  Navigator.pop(context, true);
-                },
-                child: const Text('حذف'),
-              ),
-            ],
-          );
-        },
+      // السبب + إرساله إليه + منع إعادة التسجيل
+      if (!mounted) return;
+      final endFields = await MembershipEndDialog.show(
+        context,
+        isDelete: true,
+        name: user['name']?.toString(),
+        reasonRequired: true,
       );
-
-      if (confirmed != true) return;
+      if (endFields == null) return;
 
       // 🔥 تنفيذ الحذف
       final res = await dio.post(
@@ -206,7 +184,9 @@ class _AdminDirectoryScreenState extends State<AdminDirectoryScreen>
         data: FormData.fromMap({
           'user_id': userId.toString(),
           'action': 'delete',
-          'reason': controller.text.trim(),
+          'reason': endFields['reason'],
+          'send_reason': endFields['send_reason'].toString(),
+          'block': endFields['block'].toString(),
         }),
       );
 
