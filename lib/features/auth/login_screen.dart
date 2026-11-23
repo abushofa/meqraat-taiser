@@ -527,6 +527,7 @@ class _LoginScreenState extends State<LoginScreen>
                                               style: const TextStyle(
                                                   fontSize: 14, height: 1.5)),
                                         ],
+                                        if (p.data['type'] != 'account_end') ...[
                                         const SizedBox(height: 6),
                                         const Text(
                                           'سجّل الدخول لفتحه',
@@ -534,6 +535,7 @@ class _LoginScreenState extends State<LoginScreen>
                                               fontSize: 12.5,
                                               color: Color(0xFF6B7280)),
                                         ),
+                                        ],
                                       ],
                                     ),
                                   ),

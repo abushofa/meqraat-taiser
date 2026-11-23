@@ -158,11 +158,21 @@ class PushNotificationService {
         await _showLocalNotification(
           title: message.notification?.title ?? 'إشعار جديد',
           body: message.notification?.body ?? '',
-          payload: jsonEncode(message.data),
+          // العنوان والنص مع البيانات: حتى تعرضهما صفحة الدخول إن لزم
+          payload: jsonEncode({
+            ...message.data,
+            '_title': message.notification?.title ?? '',
+            '_body': message.notification?.body ?? '',
+          }),
           channelId: channelId,
         );
       }
       // iOS: setForegroundNotificationPresentationOptions يتولى العرض تلقائياً
+
+      // رُفض أو حُذف والتطبيق مفتوح: لا ننتظر الضغط — حسابه انتهى، فنعرض الرسالة في صفحة الدخول
+      if (message.data['type']?.toString() == 'account_end') {
+        await _handleTap(message);
+      }
     });
 
     // المستخدم يضغط على الإشعار والتطبيق في الخلفية
@@ -257,10 +267,10 @@ class PushNotificationService {
   static void _handleNotificationPayloadString(String payload) {
     try {
       final decoded = jsonDecode(payload);
-      if (decoded is Map<String, dynamic>) {
-        _handleNotificationData(decoded);
-      } else if (decoded is Map) {
-        _handleNotificationData(Map<String, dynamic>.from(decoded));
+      if (decoded is Map) {
+        final data = Map<String, dynamic>.from(decoded);
+        _handleTapData(data, data.remove('_title')?.toString(),
+            data.remove('_body')?.toString());
       }
     } catch (_) {
       _handleNotificationData({'type': payload, 'target_role': 'student'});
@@ -269,19 +279,38 @@ class PushNotificationService {
 
   /// ضغطة على إشعار: إن لم يكن المستخدم داخلًا (أو التطبيق يُفتح من الإغلاق)
   /// نحفظه ليظهر في صفحة الدخول بدل أن يضيع.
-  static Future<void> _handleTap(RemoteMessage message) async {
+  static Future<void> _handleTap(RemoteMessage message) => _handleTapData(
+        Map<String, dynamic>.from(message.data),
+        message.notification?.title,
+        message.notification?.body,
+      );
+
+  static Future<void> _handleTapData(
+      Map<String, dynamic> data, String? title, String? body) async {
     final loggedIn = await SessionStorage.isLoggedIn();
-    final navReady = NotificationNavigationService.navigatorKey.currentState != null;
-    if (!loggedIn || !navReady) {
-      final data = Map<String, dynamic>.from(message.data);
+    final navigator = NotificationNavigationService.navigatorKey.currentState;
+    final isAccountEnd = data['type']?.toString() == 'account_end';
+
+    if (!loggedIn || navigator == null || isAccountEnd) {
       pending.value = PendingNotification(
-        message.notification?.title ?? data['message_title']?.toString() ?? 'إشعار',
-        message.notification?.body ?? data['message_body']?.toString() ?? '',
+        (title != null && title.isNotEmpty)
+            ? title
+            : data['message_title']?.toString() ?? 'إشعار',
+        (body != null && body.isNotEmpty)
+            ? body
+            : data['message_body']?.toString() ?? '',
         data,
       );
+    }
+
+    // رفض/إنهاء عضوية: الحساب لم يعد موجودًا ← صفحة الدخول (فيها نص الإشعار)
+    if (isAccountEnd) {
+      if (loggedIn) await SessionStorage.clear();
+      navigator?.pushNamedAndRemoveUntil('/login', (_) => false);
       return;
     }
-    await _handleNotificationData(message.data);
+    if (!loggedIn || navigator == null) return;
+    await _handleNotificationData(data);
   }
 
   /// بعد تسجيل الدخول: يفتح التبويب المناسب للإشعار المحفوظ (يُستدعى بعد فتح الصفحة الرئيسية)

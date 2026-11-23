@@ -12,6 +12,8 @@ class MembershipEndDialog {
   }) {
     return showDialog<Map<String, dynamic>>(
       context: context,
+      // اللمس خارج النافذة (لإخفاء لوحة المفاتيح) كان يغلقها ويضيع ما كُتب
+      barrierDismissible: false,
       builder: (_) => _MembershipEndDialog(
         isDelete: isDelete,
         name: name,
@@ -69,48 +71,69 @@ class _MembershipEndDialogState extends State<_MembershipEndDialog> {
 
     return AlertDialog(
       title: Text(who.isEmpty ? title : '$title: $who'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'سيصله إشعار وبريد إلكتروني بأنه ${widget.isDelete ? 'تم إنهاء عضويته (أو رفض طلبه إن لم يكن معتمدًا)' : 'تم رفض طلب تسجيله'}، '
-              'مع بريد المقرأة للاستفسار، ويُنقل إلى "المحذوفون".',
-              style: const TextStyle(fontSize: 13.5, height: 1.5, color: Color(0xFF4B5563)),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _reason,
-              maxLines: 3,
-              maxLength: 255,
-              onChanged: (_) => setState(() => _showRequired = false),
-              decoration: InputDecoration(
-                labelText: widget.reasonRequired ? 'السبب' : 'السبب (اختياري)',
-                hintText: 'مثال: تقديم بيانات غير صحيحة',
-                border: const OutlineInputBorder(),
-                errorText: _showRequired ? 'اكتب السبب' : null,
+      content: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        behavior: HitTestBehavior.translucent,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'سيصله إشعار وبريد إلكتروني بأنه ${widget.isDelete ? 'تم إنهاء عضويته (أو رفض طلبه إن لم يكن معتمدًا)' : 'تم رفض طلب تسجيله'}، '
+                'مع بريد المقرأة للاستفسار، ويُنقل إلى "المحذوفون".',
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  height: 1.5,
+                  color: Color(0xFF4B5563),
+                ),
               ),
-            ),
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              controlAffinity: ListTileControlAffinity.leading,
-              value: hasReason && _sendReason,
-              onChanged: hasReason ? (v) => setState(() => _sendReason = v ?? false) : null,
-              title: const Text('إرسال السبب إليه'),
-              subtitle: const Text('إن لم يُختر يبقى السبب في "المحذوفون" فقط',
-                  style: TextStyle(fontSize: 12)),
-            ),
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              controlAffinity: ListTileControlAffinity.leading,
-              value: _block,
-              onChanged: (v) => setState(() => _block = v ?? false),
-              title: const Text('منعه من التسجيل مجددًا بهذا البريد'),
-              subtitle: const Text('يُرفع المنع تلقائيًا إن استرجعته',
-                  style: TextStyle(fontSize: 12)),
-            ),
-          ],
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: _block,
+                onChanged: (v) => setState(() => _block = v ?? false),
+                title: const Text('منعه من التسجيل مجددًا بهذا البريد'),
+                subtitle: const Text(
+                  'يُرفع المنع تلقائيًا إن استرجعته',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ),
+              const SizedBox(height: 4),
+              TextField(
+                controller: _reason,
+                minLines: 1,
+                maxLines: 3,
+                maxLength: 255,
+                keyboardType: TextInputType.text,
+                textInputAction:
+                    TextInputAction.done, // زر "تم" يغلق لوحة المفاتيح
+                onSubmitted: (_) => FocusScope.of(context).unfocus(),
+                onChanged: (_) => setState(() => _showRequired = false),
+                decoration: InputDecoration(
+                  labelText: widget.reasonRequired
+                      ? 'السبب'
+                      : 'السبب (اختياري)',
+                  hintText: 'مثال: تقديم بيانات غير صحيحة',
+                  border: const OutlineInputBorder(),
+                  errorText: _showRequired ? 'اكتب السبب' : null,
+                ),
+              ),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: hasReason && _sendReason,
+                onChanged: hasReason
+                    ? (v) => setState(() => _sendReason = v ?? false)
+                    : null,
+                title: const Text('إرسال السبب إليه'),
+                subtitle: const Text(
+                  'إن لم يُختر يبقى السبب في "المحذوفون" فقط',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
       actions: [
