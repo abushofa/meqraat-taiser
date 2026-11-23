@@ -16,6 +16,14 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
 
+    <!-- صلاحيات Agora (Wi-Fi/Bluetooth) وصلاحية الكاميرا تجعل Google Play يفترض أن هذه
+         العتاد مطلوب فيحجب التطبيق عن بعض الأجهزة؛ نعلنها اختيارية -->
+    <uses-feature android:name="android.hardware.wifi" android:required="false" />
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
+
     <application
         android:label="مقرأة التيسير"
         android:name="${applicationName}"
