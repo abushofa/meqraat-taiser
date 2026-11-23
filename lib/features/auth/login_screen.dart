@@ -310,6 +310,8 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Future<void> _goToStudentRegister() async {
+    // تسجيل جديد: إشعار الحساب السابق (رفض/حذف/تذكير) لم يعد يخصه
+    PushNotificationService.pending.value = null;
     setState(() => _checkingSchoolFull = true);
     await AppSettingsService.load();
     if (!mounted) return;
@@ -358,6 +360,8 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Future<void> _goToTeacherRegister() async {
+    // تسجيل جديد: إشعار الحساب السابق (رفض/حذف/تذكير) لم يعد يخصه
+    PushNotificationService.pending.value = null;
     setState(() => _checkingSchoolFull = true);
     await AppSettingsService.load();
     if (!mounted) return;
@@ -494,7 +498,7 @@ class _LoginScreenState extends State<LoginScreen>
                         ValueListenableBuilder<PendingNotification?>(
                           valueListenable: PushNotificationService.pending,
                           builder: (context, p, _) {
-                            if (p == null) return const SizedBox.shrink();
+                            if (p == null || p.isStale) return const SizedBox.shrink();
                             return Container(
                               width: double.infinity,
                               margin: const EdgeInsets.only(bottom: 16),

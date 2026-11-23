@@ -16,7 +16,11 @@ class PendingNotification {
   final String title;
   final String body;
   final Map<String, dynamic> data;
-  const PendingNotification(this.title, this.body, this.data);
+  final DateTime receivedAt;
+  PendingNotification(this.title, this.body, this.data) : receivedAt = DateTime.now();
+
+  /// بعد ساعة لم يعد ذا صلة (مثل تذكير جلسة انتهت)
+  bool get isStale => DateTime.now().difference(receivedAt) > const Duration(hours: 1);
 }
 
 class PushNotificationService {
@@ -343,7 +347,7 @@ class PushNotificationService {
   static void applyPendingAfterLogin(String? role) {
     final p = pending.value;
     pending.value = null;
-    if (p == null) return;
+    if (p == null || p.isStale) return;
     final type = p.data['type']?.toString();
     final target = p.data['target_role']?.toString();
     if (target != null && target != role) return; // حساب آخر غير صاحب الإشعار
