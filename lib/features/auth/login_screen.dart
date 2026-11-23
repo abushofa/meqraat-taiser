@@ -309,7 +309,9 @@ class _LoginScreenState extends State<LoginScreen>
     return '$word أو يزيد';
   }
 
-  Future<void> _goToStudentRegister() async {
+  /// [test]: ضغطة مطوّلة — تفتح النموذج والتسجيل متوقف؛ السيرفر يقبل فقط بريد التجربة
+  /// (settings.registration_test_emails)، وغيره يُرفض برسالة الامتلاء نفسها.
+  Future<void> _goToStudentRegister({bool test = false}) async {
     // تسجيل جديد: إشعار الحساب السابق (رفض/حذف/تذكير) لم يعد يخصه
     PushNotificationService.pending.value = null;
     setState(() => _checkingSchoolFull = true);
@@ -317,7 +319,7 @@ class _LoginScreenState extends State<LoginScreen>
     if (!mounted) return;
     setState(() => _checkingSchoolFull = false);
 
-    if (!AppSettingsService.studentRegistrationEnabled) {
+    if (!test && !AppSettingsService.studentRegistrationEnabled) {
       await AppDialogs.showInfo(
         context: context,
         title: 'التسجيل كطالب',
@@ -329,7 +331,7 @@ class _LoginScreenState extends State<LoginScreen>
       return;
     }
 
-    if (AppSettingsService.schoolFullEnabled) {
+    if (!test && AppSettingsService.schoolFullEnabled) {
       final months = AppSettingsService.schoolFullWaitMonths;
       final continueAnyway = await AppDialogs.showConfirm(
         context: context,
@@ -359,7 +361,7 @@ class _LoginScreenState extends State<LoginScreen>
     }
   }
 
-  Future<void> _goToTeacherRegister() async {
+  Future<void> _goToTeacherRegister({bool test = false}) async {
     // تسجيل جديد: إشعار الحساب السابق (رفض/حذف/تذكير) لم يعد يخصه
     PushNotificationService.pending.value = null;
     setState(() => _checkingSchoolFull = true);
@@ -367,7 +369,7 @@ class _LoginScreenState extends State<LoginScreen>
     if (!mounted) return;
     setState(() => _checkingSchoolFull = false);
 
-    if (!AppSettingsService.teacherRegistrationEnabled) {
+    if (!test && !AppSettingsService.teacherRegistrationEnabled) {
       await AppDialogs.showInfo(
         context: context,
         title: 'التسجيل كمُقرئ',
@@ -651,6 +653,10 @@ class _LoginScreenState extends State<LoginScreen>
                             onPressed: (_loading || _checkingSchoolFull)
                                 ? null
                                 : _goToStudentRegister,
+                            // للتجربة والتسجيل متوقف (بريد التجربة فقط)
+                            onLongPress: (_loading || _checkingSchoolFull)
+                                ? null
+                                : () => _goToStudentRegister(test: true),
                             icon: _checkingSchoolFull
                                 ? const SizedBox(
                                     width: 16,
@@ -672,6 +678,9 @@ class _LoginScreenState extends State<LoginScreen>
                             onPressed: (_loading || _checkingSchoolFull)
                                 ? null
                                 : _goToTeacherRegister,
+                            onLongPress: (_loading || _checkingSchoolFull)
+                                ? null
+                                : () => _goToTeacherRegister(test: true),
                             icon: const Icon(Icons.record_voice_over_outlined),
                             label: const Text('التسجيل كمُقرئ'),
                           ),

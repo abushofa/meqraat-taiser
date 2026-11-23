@@ -184,9 +184,8 @@ class _AdminDirectoryScreenState extends State<AdminDirectoryScreen>
         data: FormData.fromMap({
           'user_id': userId.toString(),
           'action': 'delete',
-          'reason': endFields['reason'],
-          'send_reason': endFields['send_reason'].toString(),
-          'block': endFields['block'].toString(),
+          // reason / end_kind / notify / send_reason / block
+          ...endFields.map((k, v) => MapEntry(k, v.toString())),
         }),
       );
 
