@@ -311,6 +311,32 @@ class PushNotificationService {
     }
     if (!loggedIn || navigator == null) return;
     await _handleNotificationData(data);
+    _showReminderText(data, title, body);
+  }
+
+  /// تذكير الجلسة لا يُحفظ في الرسائل، فنعرض نصه فوق الصفحة التي فُتحت
+  /// (مثل: من دخل من الطلاب ومن لم يدخل) حتى لا يضيع بعد لمس الإشعار.
+  static void _showReminderText(Map<String, dynamic> data, String? title, String? body) {
+    if (data['type']?.toString() != 'session_reminder') return;
+    final text = (body ?? '').trim();
+    if (text.isEmpty) return;
+    Future.delayed(const Duration(milliseconds: 600), () {
+      final ctx = NotificationNavigationService.navigatorKey.currentState?.overlay?.context;
+      if (ctx == null || !ctx.mounted) return;
+      showDialog(
+        context: ctx,
+        builder: (dialogContext) => AlertDialog(
+          title: Text((title ?? '').trim().isEmpty ? 'تذكير الجلسة' : title!.trim()),
+          content: Text(text, style: const TextStyle(fontSize: 15, height: 1.6)),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('حسنًا'),
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   /// بعد تسجيل الدخول: يفتح التبويب المناسب للإشعار المحفوظ (يُستدعى بعد فتح الصفحة الرئيسية)
@@ -333,6 +359,7 @@ class PushNotificationService {
     } else if (role == 'admin') {
       if (type == 'message') NotificationNavigationService.openAdminMessages();
     }
+    _showReminderText(p.data, p.title, p.body);
   }
 
   static Future<void> _handleNotificationData(
