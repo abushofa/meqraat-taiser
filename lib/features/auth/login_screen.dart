@@ -1,4 +1,6 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:dio/dio.dart';
 
 import '../../core/network/api_client.dart';
@@ -56,21 +58,13 @@ class _LoginScreenState extends State<LoginScreen>
     );
 
     _scaleAnim = Tween<double>(begin: 0.72, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _introController,
-        curve: Curves.easeOutBack,
-      ),
+      CurvedAnimation(parent: _introController, curve: Curves.easeOutBack),
     );
 
-    _slideAnim = Tween<Offset>(
-      begin: const Offset(0, 0.08),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _introController,
-        curve: Curves.easeOutCubic,
-      ),
-    );
+    _slideAnim = Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero)
+        .animate(
+          CurvedAnimation(parent: _introController, curve: Curves.easeOutCubic),
+        );
 
     _pulseController = AnimationController(
       vsync: this,
@@ -78,10 +72,7 @@ class _LoginScreenState extends State<LoginScreen>
     );
 
     _pulseAnim = Tween<double>(begin: 1.0, end: 1.045).animate(
-      CurvedAnimation(
-        parent: _pulseController,
-        curve: Curves.easeInOut,
-      ),
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
     Future.delayed(const Duration(milliseconds: 120), () async {
@@ -131,7 +122,7 @@ class _LoginScreenState extends State<LoginScreen>
     });
 
     final deviceName = await DeviceInfoHelper.getDeviceName();
-    final deviceId   = await DeviceInfoHelper.getDeviceId();
+    final deviceId = await DeviceInfoHelper.getDeviceId();
 
     try {
       final dio = await ApiClient.getInstance();
@@ -182,8 +173,10 @@ class _LoginScreenState extends State<LoginScreen>
 
         // إشعار فُتح به التطبيق قبل الدخول ← افتح مكانه بعد ظهور الصفحة الرئيسية
         final r = role?.toString();
-        Future.delayed(const Duration(milliseconds: 500),
-            () => PushNotificationService.applyPendingAfterLogin(r));
+        Future.delayed(
+          const Duration(milliseconds: 500),
+          () => PushNotificationService.applyPendingAfterLogin(r),
+        );
       } else {
         setState(() {
           _error =
@@ -288,7 +281,10 @@ class _LoginScreenState extends State<LoginScreen>
               _login(force: true);
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
-            child: const Text('ادخل من هنا', style: TextStyle(color: Colors.white)),
+            child: const Text(
+              'ادخل من هنا',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -323,8 +319,7 @@ class _LoginScreenState extends State<LoginScreen>
       await AppDialogs.showInfo(
         context: context,
         title: 'التسجيل كطالب',
-        message:
-            'المقرأة ممتلئة الآن وسيفتح باب التسجيل عند توفر أماكن شاغرة.',
+        message: 'المقرأة ممتلئة الآن وسيفتح باب التسجيل عند توفر أماكن شاغرة.',
         icon: Icons.hourglass_top,
         iconColor: Colors.orange,
       );
@@ -392,6 +387,26 @@ class _LoginScreenState extends State<LoginScreen>
     }
   }
 
+  /// ضغطة مطوّلة 3 ثوانٍ على زر التسجيل ← فتح النموذج للتجربة (اهتزاز خفيف عند التفعيل)
+  Widget _testPress(VoidCallback onTest, Widget child) {
+    return RawGestureDetector(
+      gestures: {
+        LongPressGestureRecognizer:
+            GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
+              () => LongPressGestureRecognizer(
+                duration: const Duration(seconds: 3),
+              ),
+              (r) => r.onLongPress = () {
+                if (_loading || _checkingSchoolFull) return;
+                HapticFeedback.mediumImpact();
+                onTest();
+              },
+            ),
+      },
+      child: child,
+    );
+  }
+
   @override
   void dispose() {
     _emailController.dispose();
@@ -408,10 +423,7 @@ class _LoginScreenState extends State<LoginScreen>
     final logoInner = isSmall ? 66.0 : 74.0;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('تسجيل الدخول'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('تسجيل الدخول'), centerTitle: true),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
@@ -500,7 +512,9 @@ class _LoginScreenState extends State<LoginScreen>
                         ValueListenableBuilder<PendingNotification?>(
                           valueListenable: PushNotificationService.pending,
                           builder: (context, p, _) {
-                            if (p == null || p.isStale) return const SizedBox.shrink();
+                            if (p == null || p.isStale) {
+                              return const SizedBox.shrink();
+                            }
                             return Container(
                               width: double.infinity,
                               margin: const EdgeInsets.only(bottom: 16),
@@ -508,39 +522,54 @@ class _LoginScreenState extends State<LoginScreen>
                               decoration: BoxDecoration(
                                 color: const Color(0xFFFFF7E6),
                                 borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: const Color(0xFFF5C26B)),
+                                border: Border.all(
+                                  color: const Color(0xFFF5C26B),
+                                ),
                               ),
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   const Padding(
                                     padding: EdgeInsets.only(top: 2),
-                                    child: Icon(Icons.notifications_active,
-                                        color: Color(0xFFB7791F), size: 22),
+                                    child: Icon(
+                                      Icons.notifications_active,
+                                      color: Color(0xFFB7791F),
+                                      size: 22,
+                                    ),
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
-                                        Text(p.title,
-                                            style: const TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 15)),
+                                        Text(
+                                          p.title,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 15,
+                                          ),
+                                        ),
                                         if (p.body.isNotEmpty) ...[
                                           const SizedBox(height: 4),
-                                          Text(p.body,
-                                              style: const TextStyle(
-                                                  fontSize: 14, height: 1.5)),
+                                          Text(
+                                            p.body,
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                              height: 1.5,
+                                            ),
+                                          ),
                                         ],
-                                        if (p.data['type'] != 'account_end') ...[
-                                        const SizedBox(height: 6),
-                                        const Text(
-                                          'سجّل الدخول لفتحه',
-                                          style: TextStyle(
+                                        if (p.data['type'] !=
+                                            'account_end') ...[
+                                          const SizedBox(height: 6),
+                                          const Text(
+                                            'سجّل الدخول لفتحه',
+                                            style: TextStyle(
                                               fontSize: 12.5,
-                                              color: Color(0xFF6B7280)),
-                                        ),
+                                              color: Color(0xFF6B7280),
+                                            ),
+                                          ),
                                         ],
                                       ],
                                     ),
@@ -549,7 +578,8 @@ class _LoginScreenState extends State<LoginScreen>
                                     tooltip: 'إخفاء',
                                     icon: const Icon(Icons.close, size: 18),
                                     onPressed: () =>
-                                        PushNotificationService.pending.value = null,
+                                        PushNotificationService.pending.value =
+                                            null,
                                   ),
                                 ],
                               ),
@@ -608,9 +638,7 @@ class _LoginScreenState extends State<LoginScreen>
                             decoration: BoxDecoration(
                               color: Colors.green.shade50,
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: Colors.green.shade200,
-                              ),
+                              border: Border.all(color: Colors.green.shade200),
                             ),
                             child: Text(
                               _success!,
@@ -649,24 +677,24 @@ class _LoginScreenState extends State<LoginScreen>
 
                         SizedBox(
                           width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: (_loading || _checkingSchoolFull)
-                                ? null
-                                : _goToStudentRegister,
-                            // للتجربة والتسجيل متوقف (بريد التجربة فقط)
-                            onLongPress: (_loading || _checkingSchoolFull)
-                                ? null
-                                : () => _goToStudentRegister(test: true),
-                            icon: _checkingSchoolFull
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.school_outlined),
-                            label: const Text('تسجيل طالب جديد'),
+                          // للتجربة والتسجيل متوقف (بريد التجربة فقط): ضغطة 3 ثوانٍ
+                          child: _testPress(
+                            () => _goToStudentRegister(test: true),
+                            OutlinedButton.icon(
+                              onPressed: (_loading || _checkingSchoolFull)
+                                  ? null
+                                  : _goToStudentRegister,
+                              icon: _checkingSchoolFull
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.school_outlined),
+                              label: const Text('تسجيل طالب جديد'),
+                            ),
                           ),
                         ),
 
@@ -674,15 +702,17 @@ class _LoginScreenState extends State<LoginScreen>
 
                         SizedBox(
                           width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: (_loading || _checkingSchoolFull)
-                                ? null
-                                : _goToTeacherRegister,
-                            onLongPress: (_loading || _checkingSchoolFull)
-                                ? null
-                                : () => _goToTeacherRegister(test: true),
-                            icon: const Icon(Icons.record_voice_over_outlined),
-                            label: const Text('التسجيل كمُقرئ'),
+                          child: _testPress(
+                            () => _goToTeacherRegister(test: true),
+                            OutlinedButton.icon(
+                              onPressed: (_loading || _checkingSchoolFull)
+                                  ? null
+                                  : _goToTeacherRegister,
+                              icon: const Icon(
+                                Icons.record_voice_over_outlined,
+                              ),
+                              label: const Text('التسجيل كمُقرئ'),
+                            ),
                           ),
                         ),
                       ],
