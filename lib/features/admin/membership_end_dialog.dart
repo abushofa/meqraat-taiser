@@ -40,7 +40,7 @@ class _MembershipEndDialog extends StatefulWidget {
 
 class _MembershipEndDialogState extends State<_MembershipEndDialog> {
   final _reason = TextEditingController();
-  bool _sendReason = true;
+  bool _sendReason = false;
   bool _block = false;
   bool _showRequired = false;
 
@@ -52,7 +52,8 @@ class _MembershipEndDialogState extends State<_MembershipEndDialog> {
 
   void _confirm() {
     final r = _reason.text.trim();
-    if (widget.reasonRequired && r.isEmpty) {
+    // السبب مطلوب في الحذف، أو إن اختير إرساله
+    if ((widget.reasonRequired || _sendReason) && r.isEmpty) {
       setState(() => _showRequired = true);
       return;
     }
@@ -65,7 +66,6 @@ class _MembershipEndDialogState extends State<_MembershipEndDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final hasReason = _reason.text.trim().isNotEmpty;
     final who = (widget.name ?? '').trim();
     final title = widget.isDelete ? 'حذف' : 'رفض';
 
@@ -99,6 +99,20 @@ class _MembershipEndDialogState extends State<_MembershipEndDialog> {
                   style: TextStyle(fontSize: 12),
                 ),
               ),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: _sendReason,
+                onChanged: (v) => setState(() {
+                  _sendReason = v ?? false;
+                  _showRequired = false;
+                }),
+                title: const Text('إرسال السبب إليه'),
+                subtitle: const Text(
+                  'يُضاف إلى الإشعار والبريد. إن لم يُختر يبقى السبب في "المحذوفون" فقط',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ),
               const SizedBox(height: 4),
               TextField(
                 controller: _reason,
@@ -111,25 +125,14 @@ class _MembershipEndDialogState extends State<_MembershipEndDialog> {
                 onSubmitted: (_) => FocusScope.of(context).unfocus(),
                 onChanged: (_) => setState(() => _showRequired = false),
                 decoration: InputDecoration(
-                  labelText: widget.reasonRequired
+                  labelText: _sendReason
+                      ? 'السبب (سيُرسل إليه)'
+                      : widget.reasonRequired
                       ? 'السبب'
                       : 'السبب (اختياري)',
                   hintText: 'مثال: تقديم بيانات غير صحيحة',
                   border: const OutlineInputBorder(),
                   errorText: _showRequired ? 'اكتب السبب' : null,
-                ),
-              ),
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                controlAffinity: ListTileControlAffinity.leading,
-                value: hasReason && _sendReason,
-                onChanged: hasReason
-                    ? (v) => setState(() => _sendReason = v ?? false)
-                    : null,
-                title: const Text('إرسال السبب إليه'),
-                subtitle: const Text(
-                  'إن لم يُختر يبقى السبب في "المحذوفون" فقط',
-                  style: TextStyle(fontSize: 12),
                 ),
               ),
             ],
