@@ -2,7 +2,7 @@ name: quran_app
 description: "A Quran learning app."
 publish_to: 'none'
 
-version: 1.8.2+24
+version: 1.8.3+25
 
 environment:
   sdk: ^3.10.4
@@ -34,6 +34,7 @@ dependencies:
   audio_session: ^0.1.16
   device_info_plus: ^13.1.0
   wakelock_plus: 1.6.1 # 1.7.0 لا يُترجم على Android مع Kotlin الحالي
+  in_app_review: ^2.0.12
   
   
 dev_dependencies:

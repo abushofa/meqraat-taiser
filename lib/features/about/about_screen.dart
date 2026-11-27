@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/services/review_service.dart';
 
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
@@ -59,6 +60,17 @@ class AboutScreen extends StatelessWidget {
             const Divider(height: 1),
             _linkRow(Icons.privacy_tip_outlined, 'سياسة الخصوصية',
                 'https://abushofa.github.io/meqraat-taiser/privacy_policy_ar.html'),
+          ]),
+          const SizedBox(height: 12),
+          _infoCard([
+            ListTile(
+              leading: const Icon(Icons.star_outline, color: Colors.teal),
+              title: const Text('قيّم التطبيق',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: const Text('شاركنا رأيك في المتجر، فهو يساعدنا على التحسين'),
+              trailing: const Icon(Icons.chevron_left),
+              onTap: ReviewService.openStore,
+            ),
           ]),
           const SizedBox(height: 12),
           _infoCard([

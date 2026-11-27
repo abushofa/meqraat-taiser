@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../core/network/api_client.dart';
+import '../../core/services/review_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -825,6 +826,9 @@ class _AgoraCallScreenState extends State<AgoraCallScreen>
     } catch (e) {
       debugPrint("LEAVE ERROR: $e");
     }
+
+    // بعد إكمال عدد من الجلسات الحقيقية يُطلب التقييم مرة واحدة (بعد الخروج لا أثناء الجلسة)
+    ReviewService.afterSession(_sessionSeconds);
 
     if (mounted) Navigator.pop(context);
   }
