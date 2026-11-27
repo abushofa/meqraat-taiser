@@ -47,7 +47,16 @@ class AboutScreen extends StatelessWidget {
               style: const TextStyle(color: Colors.grey, fontSize: 14),
             ),
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 16),
+          // في الأعلى حتى يُرى دون تمرير
+          Center(
+            child: FilledButton.icon(
+              onPressed: ReviewService.openStore,
+              icon: const Icon(Icons.star_outline),
+              label: const Text('قيّم التطبيق'),
+            ),
+          ),
+          const SizedBox(height: 24),
           _infoCard([
             _infoRow(Icons.info_outline, 'الوصف',
                 'منصة متكاملة لتعليم القرآن الكريم وتلاوته، تربط الطلاب بالمقرئين عبر جلسات صوتية مباشرة.'),
@@ -60,17 +69,6 @@ class AboutScreen extends StatelessWidget {
             const Divider(height: 1),
             _linkRow(Icons.privacy_tip_outlined, 'سياسة الخصوصية',
                 'https://abushofa.github.io/meqraat-taiser/privacy_policy_ar.html'),
-          ]),
-          const SizedBox(height: 12),
-          _infoCard([
-            ListTile(
-              leading: const Icon(Icons.star_outline, color: Colors.teal),
-              title: const Text('قيّم التطبيق',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: const Text('شاركنا رأيك في المتجر، فهو يساعدنا على التحسين'),
-              trailing: const Icon(Icons.chevron_left),
-              onTap: ReviewService.openStore,
-            ),
           ]),
           const SizedBox(height: 12),
           _infoCard([

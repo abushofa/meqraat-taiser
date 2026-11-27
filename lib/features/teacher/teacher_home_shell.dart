@@ -17,6 +17,7 @@ import 'teacher_dashboard_screen.dart';
 import 'teacher_students_screen.dart';
 import 'teacher_messages_screen.dart';
 import 'teacher_sessions_screen.dart';
+import '../../core/services/review_service.dart';
 import 'teacher_schedule_screen.dart';
 
 class TeacherHomeShell extends StatefulWidget {
@@ -129,6 +130,8 @@ class _TeacherHomeShellState extends State<TeacherHomeShell>
     } else if (value == 'settings') {
       Navigator.push(
           context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+    } else if (value == 'rate') {
+      ReviewService.openStore();
     } else if (value == 'about') {
       Navigator.push(
           context, MaterialPageRoute(builder: (_) => const AboutScreen()));
@@ -192,6 +195,14 @@ class _TeacherHomeShellState extends State<TeacherHomeShell>
                 Icon(Icons.info_outline),
                 SizedBox(width: 10),
                 Text('حول التطبيق'),
+              ]),
+            ),
+            PopupMenuItem<String>(
+              value: 'rate',
+              child: Row(children: [
+                Icon(Icons.star_outline, color: Colors.amber),
+                SizedBox(width: 10),
+                Text('قيّم التطبيق'),
               ]),
             ),
             PopupMenuItem<String>(

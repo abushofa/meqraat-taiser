@@ -17,6 +17,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'student_dashboard_screen.dart';
 import 'student_messages_screen.dart';
 import 'student_sessions_screen.dart';
+import '../../core/services/review_service.dart';
 import 'student_notes_screen.dart';
 
 class StudentHomeShell extends StatefulWidget {
@@ -138,6 +139,8 @@ class _StudentHomeShellState extends State<StudentHomeShell>
     } else if (value == 'settings') {
       Navigator.push(
           context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+    } else if (value == 'rate') {
+      ReviewService.openStore();
     } else if (value == 'about') {
       Navigator.push(
           context, MaterialPageRoute(builder: (_) => const AboutScreen()));
@@ -200,6 +203,14 @@ class _StudentHomeShellState extends State<StudentHomeShell>
                 Icon(Icons.info_outline),
                 SizedBox(width: 10),
                 Text('حول التطبيق'),
+              ]),
+            ),
+            PopupMenuItem<String>(
+              value: 'rate',
+              child: Row(children: [
+                Icon(Icons.star_outline, color: Colors.amber),
+                SizedBox(width: 10),
+                Text('قيّم التطبيق'),
               ]),
             ),
             PopupMenuItem<String>(
