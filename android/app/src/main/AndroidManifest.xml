@@ -54,20 +54,13 @@
             android:name="flutterEmbedding"
             android:value="2" />
 
-        <!-- خدمة flutter_foreground_task -->
+        <!-- خدمة flutter_foreground_task (تُبقي الميكروفون يعمل والتطبيق في الخلفية).
+             الاسم الصحيح ForegroundService؛ الاسم السابق ForegroundTaskService غير موجود فلم تكن الخدمة تبدأ أبدًا.
+             مستقبِلات الإقلاع/التحديث يعلنها الإضافة نفسها (RebootReceiver/RestartReceiver). -->
         <service
-            android:name="com.pravera.flutter_foreground_task.service.ForegroundTaskService"
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
             android:foregroundServiceType="microphone"
             android:exported="false" />
-
-        <receiver
-            android:name="com.pravera.flutter_foreground_task.receiver.TaskStartReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
-            </intent-filter>
-        </receiver>
 
     </application>
 
